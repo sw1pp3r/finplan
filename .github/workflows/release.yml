@@ -11,14 +11,33 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Run the suite against PostgreSQL — the same engine the app runs in
+    # production — so DB-specific behavior (varchar limits, ALTER TYPE
+    # migrations) is exercised, not just SQLite.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: finplan
+          POSTGRES_DB: finplan
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finplan"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: Install backend deps
-        run: pip install fastapi "uvicorn[standard]" jinja2 sqlalchemy httpx python-multipart apscheduler pillow pytest
-      - name: Run tests
+        run: pip install fastapi "uvicorn[standard]" jinja2 sqlalchemy httpx python-multipart apscheduler pillow psycopg2-binary pytest
+      - name: Run tests on PostgreSQL (production parity)
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg2://finplan@localhost:5432/finplan
         run: pytest -q
 
   docker:

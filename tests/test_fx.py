@@ -1,3 +1,4 @@
+import os
 from datetime import date
 from decimal import Decimal
 
@@ -13,7 +14,7 @@ D = date(2026, 6, 7)
 
 @pytest.fixture()
 def db():
-    engine = make_engine("sqlite://")
+    engine = make_engine(os.environ.get("TEST_DATABASE_URL", "sqlite://"))
     init_db(engine)
     with sessionmaker(bind=engine)() as session:
         yield session

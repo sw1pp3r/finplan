@@ -1,3 +1,4 @@
+import os
 from datetime import date, timedelta
 
 import pytest
@@ -10,7 +11,7 @@ TODAY = date.today()
 
 @pytest.fixture()
 def client():
-    app = create_app(database_url="sqlite://", api_token=None, seed=False)  # in-memory, чистый справочник
+    app = create_app(database_url=os.environ.get("TEST_DATABASE_URL", "sqlite://"), api_token=None, seed=False)  # in-memory, чистый справочник
     with TestClient(app) as c:
         yield c
 
@@ -734,7 +735,7 @@ def test_course_tariff_currency_surfaces_in_rates(client):
 # ---------- auth ----------
 
 def test_api_token_enforced_when_configured():
-    app = create_app(database_url="sqlite://", api_token="secret")
+    app = create_app(database_url=os.environ.get("TEST_DATABASE_URL", "sqlite://"), api_token="secret")
     with TestClient(app) as c:
         assert c.get("/api/summary").status_code == 401
         ok = c.get("/api/summary", headers={"Authorization": "Bearer secret"})

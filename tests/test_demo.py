@@ -1,3 +1,4 @@
+import os
 """Демо-режим: заголовок X-Demo роутит запросы на отдельную засеянную in-memory БД."""
 from fastapi.testclient import TestClient
 
@@ -6,7 +7,7 @@ from app.main import create_app
 
 def make_client():
     # реальная (тестовая) БД пустая: seed=False, без демо-данных
-    app = create_app(database_url="sqlite://", api_token=None, seed=False)
+    app = create_app(database_url=os.environ.get("TEST_DATABASE_URL", "sqlite://"), api_token=None, seed=False)
     return TestClient(app)
 
 

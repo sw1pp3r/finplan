@@ -10,8 +10,10 @@ You enter where you stand today (a **snapshot**), what you owe in the future
 (**obligations**), and what you expect to receive (**inflows**). finplan projects
 your balance forward and shows the curve, three scenarios, and any shortfall.
 
-- **Single-container deploy:** FastAPI backend + a React/Tailwind SPA in one image.
-- **Standalone:** SQLite by default, no external services required. PostgreSQL optional.
+- **Compose deploy:** FastAPI backend + a React/Tailwind SPA in one image, plus PostgreSQL.
+- **Production parity:** bundled **PostgreSQL** by default — the same engine the app is
+  tested and run against, so there are no SQLite-vs-Postgres surprises. SQLite stays
+  available for a minimal single-file setup.
 - **Private by design:** no telemetry, no analytics. The only outbound request is an
   optional once-a-day FX-rate fetch, which is **off by default**.
 - **Multi-currency** with a base currency and daily-or-manual FX rates.
@@ -31,11 +33,12 @@ cd finplan
 docker compose up -d --build
 ```
 
-Open **http://localhost:8742**. On first load an in-app onboarding walks you through
-the model and the setup steps. Your data lives in Docker volumes (`finplan-data`,
-`finplan-images`) and survives restarts and redeploys.
+This starts **PostgreSQL and the app**. Open **http://localhost:8742**. On first load an
+in-app onboarding walks you through the model and the setup steps. Your data lives in
+Docker volumes (`finplan-db`, `finplan-images`) and survives restarts and redeploys.
 
-That's it — no `.env` needed. To customize (Postgres, FX fetch, an API token), copy
+That's it — no `.env` needed for a private/local run. To customize (your own DB
+credentials, an external database or SQLite, FX fetch, an API token), copy
 `.env.example` to `.env` and edit, then `docker compose up -d` again.
 
 ---
@@ -75,14 +78,17 @@ All optional — see `.env.example`. Highlights:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:////data/finplan.db` | SQLite file (on a volume) or a Postgres URL |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `finplan` | Credentials for the bundled PostgreSQL; the app's `DATABASE_URL` is derived from them |
+| `DATABASE_URL` | bundled Postgres | Override to point at an external database, or SQLite |
 | `FINPLAN_FX_AUTOFETCH` | `0` | `1` enables a daily FX fetch from open.er-api.com. Off = no outbound network |
 | `FINPLAN_API_TOKEN` | empty | If set, `/api/*` requires `Authorization: Bearer <token>` |
 | `FINPLAN_IMAGE_DIR` | `/srv/finplan/wish-images` | Where wish-board images are stored |
 
-**PostgreSQL instead of SQLite:** point `DATABASE_URL` at your database, e.g.
-`postgresql+psycopg2://USER:SECRET@HOST:5432/finplan`. Schema is created automatically
-on startup (lightweight migrations, no Alembic needed).
+The schema is created automatically on startup (lightweight migrations, no Alembic
+needed). **External database:** set `DATABASE_URL` to your own Postgres, e.g.
+`postgresql+psycopg2://USER:SECRET@your-host:5432/finplan`. **Minimal SQLite setup:** set
+`DATABASE_URL=sqlite:////data/finplan.db` and mount a volume at `/data` — handy for a
+quick single-file trial, though PostgreSQL is recommended to match production.
 
 ---
 

@@ -1,33 +1,48 @@
-# finplan — self-hosted cash-flow planner.
+# finplan — self-hosted cash-flow planner (PostgreSQL by default).
 #
 # First run (from a clone):   docker compose up -d --build
-#   → builds the image from source and starts on http://localhost:8742
+#   → builds the app image, starts PostgreSQL + the app, serves http://localhost:8742
 #
 # Update later (pull the published image):
 #   docker compose pull && docker compose up -d
 #
-# This file both builds from source AND references a published GHCR image,
-# so the same compose works for a fresh install and for pull-based updates.
+# PostgreSQL is the default so your deployment matches what the project is
+# tested and run against in production. The database is reachable only inside
+# this compose network — its port is intentionally NOT published to the host.
 
 services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-finplan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finplan}
+      POSTGRES_DB: ${POSTGRES_DB:-finplan}
+    volumes:
+      - finplan-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finplan} -d ${POSTGRES_DB:-finplan}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   finplan:
     image: ghcr.io/sw1pp3r/finplan:latest
     build: .
     container_name: finplan
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
-      # SQLite on a named volume — survives redeploys. Swap for a Postgres
-      # DATABASE_URL if you prefer (see .env.example).
-      - DATABASE_URL=sqlite:////data/finplan.db
-      # FX fetch off by default: the app phones home to nobody.
-      - FINPLAN_FX_AUTOFETCH=0
-      - FINPLAN_IMAGE_DIR=/srv/finplan/wish-images
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://${POSTGRES_USER:-finplan}:${POSTGRES_PASSWORD:-finplan}@db:5432/${POSTGRES_DB:-finplan}}
+      FINPLAN_FX_AUTOFETCH: "0"
+      FINPLAN_IMAGE_DIR: /srv/finplan/wish-images
     ports:
       - "8742:8000"
     volumes:
-      - finplan-data:/data
       - finplan-images:/srv/finplan/wish-images
 
 volumes:
-  finplan-data:
+  finplan-db:
   finplan-images:
