@@ -1,0 +1,33 @@
+# finplan — self-hosted cash-flow planner.
+#
+# First run (from a clone):   docker compose up -d --build
+#   → builds the image from source and starts on http://localhost:8742
+#
+# Update later (pull the published image):
+#   docker compose pull && docker compose up -d
+#
+# This file both builds from source AND references a published GHCR image,
+# so the same compose works for a fresh install and for pull-based updates.
+
+services:
+  finplan:
+    image: ghcr.io/sw1pp3r/finplan:latest
+    build: .
+    container_name: finplan
+    restart: unless-stopped
+    environment:
+      # SQLite on a named volume — survives redeploys. Swap for a Postgres
+      # DATABASE_URL if you prefer (see .env.example).
+      - DATABASE_URL=sqlite:////data/finplan.db
+      # FX fetch off by default: the app phones home to nobody.
+      - FINPLAN_FX_AUTOFETCH=0
+      - FINPLAN_IMAGE_DIR=/srv/finplan/wish-images
+    ports:
+      - "8742:8000"
+    volumes:
+      - finplan-data:/data
+      - finplan-images:/srv/finplan/wish-images
+
+volumes:
+  finplan-data:
+  finplan-images:

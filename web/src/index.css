@@ -1,0 +1,243 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./shadcn-tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/playfair-display";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Убрать спиннеры-крутилки у числовых полей — только ручной ввод цифр */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    /* full-bleed Доски использует 100vw — режем горизонтальный овершут от ширины
+       скроллбара (clip, не hidden — не создаёт scroll-container, sticky-хедер живёт) */
+    overflow-x: clip;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+/* ===================== Доска желаний — «карта мечты» =====================
+   Идея: статус достижимости — это и есть зрелище. Близкие мечты (по карману)
+   светятся тёплым/зелёным, далёкие — холодным/розовым. Стена = живая карта пути.
+   Фото остаются яркими (не затемняем). Только дешёвый по рендеру paint:
+   градиенты + box-shadow-свечение + transform/opacity. Никакого 3D на покое.
+   .board-scope — светлая галерея (инлайн); .board-fs — тёмный кинозал (фуллскрин). */
+.board-scope {
+  --board-muted: oklch(0.46 0.01 270);
+  --board-line: oklch(0 0 0 / 0.08);
+  --board-ink: oklch(0.18 0.02 270);
+  color: var(--board-ink);
+  background-color: oklch(0.985 0.004 280);
+  /* многослойная «дымка»: тёплый рассвет снизу, прохладный воздух сверху */
+  background-image:
+    radial-gradient(70% 50% at 12% -8%, oklch(0.72 0.13 286 / 0.10), transparent 70%),
+    radial-gradient(64% 48% at 96% 2%, oklch(0.74 0.11 208 / 0.09), transparent 72%),
+    radial-gradient(80% 60% at 50% 118%, oklch(0.80 0.12 42 / 0.10), transparent 68%),
+    linear-gradient(180deg, oklch(0.985 0.006 285), oklch(0.97 0.008 60));
+}
+/* тёмный кинозал для фуллскрина: фото на нём светятся */
+.board-fs {
+  --board-muted: oklch(0.74 0.02 270);
+  --board-ink: oklch(0.96 0.01 270);
+  --board-line: oklch(1 0 0 / 0.14);
+  color: var(--board-ink);
+  background-color: oklch(0.16 0.018 275);
+  background-image:
+    radial-gradient(60% 50% at 10% -6%, oklch(0.55 0.16 290 / 0.28), transparent 66%),
+    radial-gradient(56% 46% at 98% 4%, oklch(0.5 0.15 220 / 0.24), transparent 68%),
+    radial-gradient(80% 60% at 50% 116%, oklch(0.55 0.16 30 / 0.22), transparent 64%);
+}
+
+/* чистый современный гротеск (Geist) вместо засечек — плотный трекинг для display */
+.board-display {
+  font-family: 'Geist Variable', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.board-muted { color: var(--board-muted); }
+
+/* кнопка-фрост поверх фото (точечно, на hover) */
+.board-glass {
+  background: oklch(0.2 0.02 270 / 0.42);
+  backdrop-filter: blur(8px) saturate(1.2);
+  border: 1px solid oklch(1 0 0 / 0.22);
+}
+
+/* Кадр мечты (как brunocis): плоский, без тени и скруглений — только фото на фоне. */
+.wish-card { box-shadow: none; }
+
+/* живая «аура» — медленный дрейф цветных пятен за карточками. Один composited-слой,
+   анимируется только transform (blur кэшируется в текстуру) → дёшево. */
+.board-aura {
+  position: absolute; inset: -18% -12% auto -12%; height: 150%;
+  z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(38% 30% at 18% 18%, oklch(0.70 0.17 290 / 0.20), transparent 70%),
+    radial-gradient(34% 28% at 82% 30%, oklch(0.72 0.15 212 / 0.17), transparent 70%),
+    radial-gradient(46% 34% at 55% 88%, oklch(0.80 0.15 40 / 0.18), transparent 70%);
+  filter: blur(22px);
+  will-change: transform;
+  animation: aura-drift 34s ease-in-out infinite alternate;
+}
+.board-fs .board-aura {
+  background:
+    radial-gradient(40% 32% at 16% 16%, oklch(0.6 0.19 290 / 0.40), transparent 70%),
+    radial-gradient(36% 30% at 84% 28%, oklch(0.56 0.17 214 / 0.34), transparent 70%),
+    radial-gradient(48% 36% at 54% 90%, oklch(0.62 0.18 34 / 0.36), transparent 70%);
+}
+@keyframes aura-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to   { transform: translate3d(3%, 2%, 0) scale(1.1); }
+}
+/* в тёмном кинозале — лёгкая тень, чтобы кадр отделялся от фона */
+.board-fs .wish-card { box-shadow: 0 24px 60px -34px oklch(0 0 0 / 0.75); }
+
+/* статус-самоцвет в подписи */
+.gem-ok    { background: oklch(0.72 0.17 155); box-shadow: 0 0 10px oklch(0.72 0.18 155 / 0.7); }
+.gem-tight { background: oklch(0.80 0.15 82);  box-shadow: 0 0 10px oklch(0.80 0.16 82 / 0.7); }
+.gem-far   { background: oklch(0.66 0.21 18);  box-shadow: 0 0 10px oklch(0.66 0.21 18 / 0.7); }
+
+/* появление карточек: один раз при входе в кадр (с content-visibility — по мере
+   подгрузки). Дёшево (transform+opacity). Базовое состояние видимое: если анимаций
+   нет — карточки просто на месте. */
+@keyframes board-rise {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.board-rise { animation: board-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .board-scope, .board-scope * { scroll-behavior: auto !important; }
+  .board-rise { animation: none; }
+  .board-aura { animation: none; }
+  .group:hover .wish-card { transform: none; }
+}

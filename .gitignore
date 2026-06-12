@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.db
+.env
+.verify-*.png
+web/node_modules/
+web/dist/
+*.log
+wish-images/
