@@ -1,5 +1,7 @@
 # finplan
 
+**English** · [Русский](README.ru.md)
+
 A self-hosted **cash-flow planner** — not an expense tracker. finplan answers one
 question: *will my balance clear my cushion over the planning horizon, and if not,
 where is the gap and how big is it?*
