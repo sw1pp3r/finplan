@@ -63,6 +63,7 @@ export type WishItem = {
   image_url: string | null
   image_source: string | null
   card_size: string | null
+  sort_order: number
 }
 
 export type Wishes = {
@@ -79,6 +80,8 @@ export type Inflow = {
   currency: string
   expected_date: string
   probability: "confirmed" | "likely" | "possible"
+  recurrence: "once" | "weekly" | "monthly" | "yearly"
+  recurrence_end: string | null
   status: "expected" | "received" | "lost"
   counterparty: string | null
   direction: string | null
@@ -176,6 +179,7 @@ export type Settings = {
   cushion: number
   horizon_days: number
   manual_burn_weekly: number | null
+  display_name: string | null
 }
 
 export type RateRow = {

@@ -9,6 +9,16 @@ from app.main import create_app
 TODAY = date.today()
 
 
+def real_png(size=(64, 64), color=(30, 120, 200)) -> bytes:
+    """Настоящие PNG-байты (Pillow) — для тестов картинок мечт после валидации (#28/#29)."""
+    from io import BytesIO
+
+    from PIL import Image
+    buf = BytesIO()
+    Image.new("RGB", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
 @pytest.fixture()
 def client():
     app = create_app(database_url=os.environ.get("TEST_DATABASE_URL", "sqlite://"), api_token=None, seed=False)  # in-memory, чистый справочник
@@ -193,6 +203,18 @@ def test_inflow_crud_and_scenarios(client):
     assert f["scenarios"]["optimistic"][-1][1] == pytest.approx(6000.0)
 
 
+def test_forecast_accepts_optional_horizon_override(client):
+    # дашборд-дропдаун периода: ?horizon=N расширяет/сужает кривую; дефолт не меняется
+    default = client.get("/api/forecast").json()
+    assert len(default["scenarios"]["base"]) == 181  # settings.horizon_days(180) + 1
+
+    longer = client.get("/api/forecast?horizon=365").json()
+    assert len(longer["scenarios"]["base"]) == 366
+
+    shorter = client.get("/api/forecast?horizon=14").json()
+    assert len(shorter["scenarios"]["base"]) == 15
+
+
 # ---------- хотелки ----------
 
 def test_wishes_crud_with_base_conversion(client):
@@ -215,6 +237,23 @@ def test_wishes_crud_with_base_conversion(client):
     assert data["by_priority"]["high"] == pytest.approx(1500.0)
     assert data["by_priority"]["low"] == pytest.approx(1000.0)
     assert data["total"] == pytest.approx(2500.0)
+
+
+def test_wishes_reorder_sets_manual_order(client):
+    a = client.post("/api/wishes", json={"name": "A", "amount": 100, "currency": "USD"}).json()["id"]
+    b = client.post("/api/wishes", json={"name": "B", "amount": 100, "currency": "USD"}).json()["id"]
+    c = client.post("/api/wishes", json={"name": "C", "amount": 100, "currency": "USD"}).json()["id"]
+    # без явного порядка sort_order=0 у всех
+    assert all(i["sort_order"] == 0 for i in client.get("/api/wishes").json()["items"])
+    # задаём ручной порядок c, a, b
+    r = client.post("/api/wishes/reorder", json={"ids": [c, a, b]})
+    assert r.status_code == 200
+    items = client.get("/api/wishes").json()["items"]
+    assert [i["id"] for i in items] == [c, a, b]
+    assert [i["sort_order"] for i in items] == [0, 1, 2]
+    # перестановка b наверх
+    client.post("/api/wishes/reorder", json={"ids": [b, c, a]})
+    assert [i["id"] for i in client.get("/api/wishes").json()["items"]] == [b, c, a]
 
 
 def test_wish_delete(client):
@@ -267,7 +306,7 @@ def test_wish_image_url_downloads_and_serves_locally(client, monkeypatch):
     from pathlib import Path
 
     from app import images
-    monkeypatch.setattr(images, "fetch_bytes", lambda *a, **k: b"IMGBYTES")
+    monkeypatch.setattr(images, "fetch_bytes", lambda *a, **k: real_png())
     wid = client.post("/api/wishes", json={"name": "Велосипед", "amount": 500, "currency": "USD"}).json()["id"]
     r = client.post(f"/api/wishes/{wid}/image/url", json={"url": "https://example.com/x.jpg"})
     assert r.status_code == 200
@@ -276,7 +315,9 @@ def test_wish_image_url_downloads_and_serves_locally(client, monkeypatch):
     assert body["image_url"].startswith("/wish-images/")  # сохранено у нас, не хотлинк
     assert body["image_source"] == "manual"
     fname = body["image_url"].split("/wish-images/")[1]
-    assert (Path(client.app.state.image_dir) / fname).read_bytes() == b"IMGBYTES"
+    # сохранена настоящая (пережатая) картинка, а не сырые байты
+    assert images.is_real_image((Path(client.app.state.image_dir) / fname).read_bytes())
+    assert client.get(body["image_url"]).status_code == 200  # отдаётся по статике
     item = next(i for i in client.get("/api/wishes").json()["items"] if i["id"] == wid)
     assert item["image_url"] == body["image_url"]
 
@@ -302,13 +343,14 @@ def test_wish_image_upload_saves(client):
     from pathlib import Path
     wid = client.post("/api/wishes", json={"name": "Камера", "amount": 1, "currency": "USD"}).json()["id"]
     r = client.post(f"/api/wishes/{wid}/image/upload",
-                    files={"file": ("dream.png", b"PNGDATA", "image/png")})
+                    files={"file": ("dream.png", real_png(), "image/png")})
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True and body["image_url"].startswith("/wish-images/")
     assert body["image_source"] == "upload"
     fname = body["image_url"].split("/wish-images/")[1]
-    assert (Path(client.app.state.image_dir) / fname).read_bytes() == b"PNGDATA"
+    from app import images
+    assert images.is_real_image((Path(client.app.state.image_dir) / fname).read_bytes())
     item = next(i for i in client.get("/api/wishes").json()["items"] if i["id"] == wid)
     assert item["image_url"] == body["image_url"]
 
@@ -732,6 +774,21 @@ def test_course_tariff_currency_surfaces_in_rates(client):
     assert "KZT" in rates["missing"]  # валюта используется, курса ещё нет
 
 
+# ---------- spa shell caching ----------
+
+def test_spa_index_is_no_cache(client):
+    """index.html НЕ должен кешироваться браузером: иначе после редеплоя location.reload()
+    (кнопка «Демо») отдаёт старый shell, ссылающийся на удалённый хешированный бандл → белый
+    экран («всё зависает»). Хешированные ассеты при этом кешируются как обычно."""
+    from pathlib import Path
+    dist = Path(__file__).resolve().parent.parent / "web" / "dist"
+    if not dist.is_dir():
+        pytest.skip("web/dist не собран (в CI тесты идут до npm run build)")
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "no-cache" in r.headers.get("cache-control", "")
+
+
 # ---------- auth ----------
 
 def test_api_token_enforced_when_configured():
@@ -740,3 +797,106 @@ def test_api_token_enforced_when_configured():
         assert c.get("/api/summary").status_code == 401
         ok = c.get("/api/summary", headers={"Authorization": "Bearer secret"})
         assert ok.status_code == 200
+
+
+# ---------- demo concurrency ----------
+
+def test_demo_db_is_concurrency_safe():
+    """Демо-режим делит одну in-memory БД на весь threadpool FastAPI. Каждый коннект
+    обязан быть отдельным DBAPI-хэндлом (shared-cache), иначе конкурентные запросы демо
+    бьют один общий sqlite-курсор → плавающие 500 (IndexError: tuple index out of range /
+    UNIQUE constraint failed: settings.id). Регресс-гард против StaticPool single-connection."""
+    from app.db import Account
+
+    app = create_app(database_url=os.environ.get("TEST_DATABASE_URL", "sqlite://"), seed=False)
+    DemoSessionLocal = app.state.DemoSessionLocal
+    s1 = DemoSessionLocal()
+    s2 = DemoSessionLocal()
+    try:
+        # обе сессии видят засеянные демо-данные (одна и та же shared in-memory БД)
+        assert s1.query(Account).count() > 0
+        assert s2.query(Account).count() > 0
+        # …но используют РАЗНЫЕ DBAPI-коннекты — иначе параллельные запросы ломают курсор
+        c1 = s1.connection().connection.dbapi_connection
+        c2 = s2.connection().connection.dbapi_connection
+        assert c1 is not c2, "демо-сессии делят один sqlite-коннект (StaticPool) — небезопасно для конкурентных запросов"
+    finally:
+        s1.close()
+        s2.close()
+
+
+# ---------- v2: регулярные ожидаемые поступления ----------
+
+def test_inflow_recurrence_persisted_and_in_forecast(client):
+    acc = make_account(client, "Bank", "USD")
+    post_snapshot(client, [{"account_id": acc, "amount": 1000}])
+    client.patch("/api/settings", json={"horizon_days": 90})
+    r = client.post("/api/inflows", json={
+        "amount": 100, "currency": "USD", "expected_date": TODAY.isoformat(),
+        "probability": "confirmed", "recurrence": "monthly",
+    })
+    assert r.status_code == 201, r.text
+    rows = client.get("/api/inflows").json()
+    assert rows[0]["recurrence"] == "monthly"
+    assert rows[0]["recurrence_end"] is None
+    f = client.get("/api/forecast").json()
+    # регулярный доход → итог строго выше единичного поступления 100
+    assert f["scenarios"]["pessimistic"][-1][1] > 1100
+
+
+def test_inflow_recurrence_defaults_to_once(client):
+    client.post("/api/inflows", json={
+        "amount": 100, "currency": "USD", "expected_date": TODAY.isoformat()})
+    rows = client.get("/api/inflows").json()
+    assert rows[0]["recurrence"] == "once"
+
+
+def test_income_expected_recurring_counts_each_occurrence(client):
+    client.patch("/api/settings", json={"horizon_days": 120})
+    client.post("/api/inflows", json={
+        "amount": 100, "currency": "USD", "expected_date": TODAY.isoformat(),
+        "probability": "confirmed", "recurrence": "monthly"})
+    exp = client.get("/api/income").json()["expected"]
+    assert exp["total"] > 100  # развёрнуто несколько раз внутри горизонта
+    assert exp["by_probability"]["confirmed"] == pytest.approx(exp["total"])
+    assert exp["weighted"] == pytest.approx(exp["total"])  # confirmed weight = 1
+
+
+# ---------- v2: смена базовой валюты пересчитывает курсы ----------
+
+def test_change_base_currency_rebases_rates(client):
+    a_usd = make_account(client, "Bank", "USD")
+    a_eur = make_account(client, "Euro", "EUR")
+    seed_fx(client, "EUR", 1.1)  # 1 EUR = 1.1 USD
+    post_snapshot(client, [{"account_id": a_usd, "amount": 100},
+                           {"account_id": a_eur, "amount": 100}])
+    s = client.get("/api/summary").json()
+    assert s["base_currency"] == "USD"
+    assert s["t0"] == pytest.approx(210)  # 100 USD + 110 (100 EUR × 1.1)
+
+    r = client.patch("/api/settings", json={"base_currency": "EUR"})
+    assert r.status_code == 200, r.text
+
+    s2 = client.get("/api/summary").json()
+    assert s2["base_currency"] == "EUR"
+    assert s2["t0"] == pytest.approx(210 / 1.1)  # та же сумма, выраженная в EUR
+
+    rates = client.get("/api/rates").json()
+    assert rates["base_currency"] == "EUR"
+    eur = next(x for x in rates["rates"] if x["currency"] == "EUR")
+    assert eur["is_base"] is True
+    usd = next(x for x in rates["rates"] if x["currency"] == "USD")
+    assert usd["rate_to_base"] == pytest.approx(1 / 1.1)  # 1 USD ≈ 0.909 EUR
+
+
+def test_change_base_currency_without_rate_rejected(client):
+    make_account(client, "Bank", "USD")
+    r = client.patch("/api/settings", json={"base_currency": "JPY"})
+    assert r.status_code == 400
+
+
+def test_change_base_currency_same_is_noop(client):
+    make_account(client, "Bank", "USD")
+    r = client.patch("/api/settings", json={"base_currency": "USD"})
+    assert r.status_code == 200
+    assert client.get("/api/summary").json()["base_currency"] == "USD"

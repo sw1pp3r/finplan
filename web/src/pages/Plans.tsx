@@ -1,95 +1,175 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { api, type Expenses, type Obligation, type Ref } from "@/lib/api"
 import { refreshCurrencies } from "@/lib/currencies"
+import { useConverter } from "@/lib/fx"
+import { cn } from "@/lib/utils"
 import { ddmm, money, nextOccurrence, todayIso } from "@/lib/format"
-import { Badge } from "@/components/ui/badge"
+import { BaseAside } from "@/components/BaseAside"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { CurrencySelect } from "@/components/CurrencySelect"
 import { RefCombo } from "@/components/RefCombo"
+import { SectionHelp } from "@/components/SectionHelp"
+import { InfoHint } from "@/components/InfoHint"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table"
 
-function ExpensesSummary({ data }: { data: Expenses }) {
+const REC_OPTIONS = [
+  { value: "once", label: "Разовый" },
+  { value: "weekly", label: "Еженедельно" },
+  { value: "monthly", label: "Ежемесячно" },
+  { value: "yearly", label: "Ежегодно" },
+] as const
+const REC_LABEL: Record<string, string> = {
+  once: "Разовый", weekly: "Еженедельно", monthly: "Ежемесячно", yearly: "Ежегодно",
+}
+const REC_SHORT: Record<string, string> = {
+  once: "разовый", weekly: "еженедельно", monthly: "ежемесячно", yearly: "ежегодно",
+}
+
+type Filter = "all" | "recur" | "once"
+
+// ── иконки (из макета) ───────────────────────────────────────────────────────
+const Repeat = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+    <path d="M17 2l3 3-3 3" /><path d="M3 11V9a4 4 0 0 1 4-4h13" /><path d="M7 22l-3-3 3-3" /><path d="M21 13v2a4 4 0 0 1-4 4H4" />
+  </svg>
+)
+const EditIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]">
+    <path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13.5 6.5l4 4" />
+  </svg>
+)
+const CheckIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" className="h-[14px] w-[14px]">
+    <path d="M5 12l5 5L20 6" />
+  </svg>
+)
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]">
+    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+  </svg>
+)
+const PlusIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+)
+const DotsIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+    <circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" />
+  </svg>
+)
+
+// одна сетка для read-row и form-row — колонки совпадают, нет «прыжка» при редактировании
+const GRID = "grid grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px] items-center gap-3.5"
+
+// ── модуль «Ежемесячные расходы» + точка безубыточности ──────────────────────
+function Breakeven({ data }: { data: Expenses }) {
   const cur = data.base_currency
   const cats = Object.entries(data.by_category).sort(([, a], [, b]) => b - a)
-  const max = Math.max(1, data.burn_monthly, ...cats.map(([, v]) => v))
-  const Bar = ({ v }: { v: number }) => (
-    <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-      <div className="h-full rounded-full bg-red-500/70" style={{ width: `${(v / max) * 100}%` }} />
-    </div>
-  )
+  const rows: { label: string; v: number }[] = cats.map(([c, v]) => ({ label: c, v }))
+  if (data.burn_monthly > 0) rows.push({ label: "Повседневные траты", v: data.burn_monthly })
+  rows.sort((a, b) => b.v - a.v)
+  const total = data.required_monthly_income
+  const mx = Math.max(1, ...rows.map((r) => r.v))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Ежемесячные расходы</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="rounded-xl border bg-muted/40 px-6 py-4">
-          <div className="text-sm text-muted-foreground">Чтобы кэш не падал, нужно зарабатывать в месяц</div>
-          <div className="text-2xl font-semibold tabular-nums">{money(data.required_monthly_income)} {cur}</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            обязательства {money(data.monthly_obligations)} + burn {money(data.burn_monthly)} {cur}/мес
-          </div>
+    <section className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+      {/* breakdown */}
+      <Card className="gap-0 px-6 py-[22px]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+            Ежемесячные расходы
+            <InfoHint>Сколько нужно зарабатывать в месяц, чтобы деньги не таяли: регулярные платежи + повседневные траты.</InfoHint>
+          </span>
+          <span className="tnum text-sm font-semibold text-ink-2">
+            всего <b className="text-[15px] font-semibold text-foreground">{money(total)} {cur}</b> / мес
+          </span>
         </div>
-
-        {cats.length || data.burn_monthly > 0 ? (
-          <div className="flex flex-col gap-3">
-            {cats.map(([cat, total]) => (
-              <div key={cat}>
-                <div className="mb-1 flex items-baseline justify-between text-sm">
-                  <span className="font-medium">{cat}</span>
-                  <span className="tabular-nums text-red-600">{money(total)} {cur}/мес</span>
+        {rows.length ? (
+          <div className="flex flex-col gap-[13px]">
+            {rows.map((r) => {
+              const lead = total > 0 && r.v / total > 0.25
+              return (
+                <div key={r.label} className="grid grid-cols-[128px_minmax(0,1fr)_auto] items-center gap-3">
+                  <span className="truncate text-[13.5px] text-ink-2">{r.label}</span>
+                  <span className="h-2 overflow-hidden rounded-[5px] bg-card-2">
+                    <i className={cn("block h-full rounded-[5px]", lead ? "bg-primary/55" : "bg-ink-3/40")}
+                      style={{ width: `${(r.v / mx * 100).toFixed(0)}%` }} />
+                  </span>
+                  <span className="tnum min-w-[54px] text-right text-[13.5px] font-semibold">{money(r.v)} {cur}</span>
                 </div>
-                <Bar v={total} />
-              </div>
-            ))}
-            <div>
-              <div className="mb-1 flex items-baseline justify-between text-sm">
-                <span className="font-medium text-muted-foreground">Burn · повседневные траты</span>
-                <span className="tabular-nums text-red-600">{money(data.burn_monthly)} {cur}/мес</span>
-              </div>
-              <Bar v={data.burn_monthly} />
-            </div>
-            <Separator />
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-semibold">Итого в месяц</span>
-              <span className="font-semibold tabular-nums">{money(data.required_monthly_income)} {cur}</span>
-            </div>
+              )
+            })}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Добавь повторяющиеся расходы, чтобы увидеть месячную картину.</p>
         )}
+      </Card>
 
+      {/* breakeven side */}
+      <Card className="relative flex flex-col gap-0 overflow-hidden px-6 py-[22px]">
+        <span aria-hidden className="absolute inset-y-[18px] left-0 w-[3px] rounded-[3px] bg-pos" />
+        <span className="flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-pos-soft py-1 pl-2 pr-[11px]">
+          <i className="h-[7px] w-[7px] shrink-0 rounded-full bg-pos" />
+          <span className="text-xs font-semibold text-pos">Точка безубыточности</span>
+        </span>
+        <span className="mt-4 text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+          Сколько нужно зарабатывать
+        </span>
+        <div className="tnum mt-[5px] text-[34px] font-semibold leading-[1.05] tracking-[-0.035em]">
+          ≈ {money(total)} {cur}
+          <span className="text-[15px] font-medium text-ink-3"> / мес</span>
+        </div>
+        <p className="mt-[7px] text-pretty text-[13.5px] text-ink-2">
+          Чтобы выходить в ноль, нужно зарабатывать <b className="font-semibold text-foreground">≈ {money(total)} {cur}</b> в&nbsp;месяц:
+          регулярные платежи и повседневные траты.
+        </p>
+        <div className="mt-auto flex gap-6 border-t border-line-2 pt-4">
+          <div className="flex flex-col gap-0.5">
+            <span className="whitespace-nowrap text-[11.5px] text-ink-3">Регулярные платежи</span>
+            <span className="tnum whitespace-nowrap text-base font-semibold">{money(data.monthly_obligations)} {cur}</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="whitespace-nowrap text-[11.5px] text-ink-3">Повседневные траты</span>
+            <span className="tnum whitespace-nowrap text-base font-semibold">{money(data.burn_monthly)} {cur}</span>
+          </div>
+        </div>
         {data.one_off_count > 0 && (
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-3 text-[11.5px] text-ink-3">
             Разовые предстоящие: {money(data.one_off_total)} {cur} ({data.one_off_count}) — не входят в месячную сумму.
           </p>
         )}
-      </CardContent>
-    </Card>
+      </Card>
+    </section>
   )
 }
 
-const REC_LABEL = { once: "—", weekly: "нед ↻", monthly: "мес ↻", yearly: "год ↻" }
-const OB_STATUS = { planned: "план", paid: "оплачено", cancelled: "отменено" }
-
-function GhostBtn(props: React.ComponentProps<typeof Button>) {
-  return <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" {...props} />
+// ── чип статуса ──────────────────────────────────────────────────────────────
+function StatusChip({ status }: { status: Obligation["status"] }) {
+  const map = {
+    planned: { cls: "bg-warn-soft text-warn", dot: "bg-warn", label: "Запланировано" },
+    paid: { cls: "bg-pos-soft text-pos", dot: "bg-pos", label: "Оплачено" },
+    cancelled: { cls: "bg-card-2 text-ink-3", dot: "bg-ink-3", label: "Отменено" },
+  } as const
+  const s = map[status]
+  return (
+    <span className={cn("inline-flex min-w-[118px] items-center justify-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11.5px] font-semibold", s.cls)}>
+      <i className={cn("h-1.5 w-1.5 shrink-0 rounded-full", s.dot)} />{s.label}
+    </span>
+  )
 }
 
 export default function Plans() {
   const [obligations, setObligations] = useState<Obligation[]>([])
   const [expenses, setExpenses] = useState<Expenses | null>(null)
   const [categories, setCategories] = useState<Ref[]>([])
-  // контролируемая форма (добавление + редактирование)
+  const [filter, setFilter] = useState<Filter>("all")
+  // форма: adding (новый) | editingId (правка существующего) | null (закрыта)
+  const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [name, setName] = useState("")
   const [amount, setAmount] = useState("")
@@ -97,8 +177,9 @@ export default function Plans() {
   const [recurrence, setRecurrence] = useState("once")
   const [obCurrency, setObCurrency] = useState("USD")
   const [category, setCategory] = useState("")
-  // дата окончания повтора (показывается только для повторяющихся; null для разовых)
+  const [status, setStatus] = useState("planned")
   const [recurrenceEnd, setRecurrenceEnd] = useState<string | null>(null)
+  const { base, conv } = useConverter()
 
   const load = useCallback(async () => {
     const [obs, cats, exp] = await Promise.all([
@@ -115,21 +196,27 @@ export default function Plans() {
   useEffect(() => { void load() }, [load])
 
   function resetForm() {
-    setEditingId(null)
+    setAdding(false); setEditingId(null)
     setName(""); setAmount(""); setDueDate("")
-    setRecurrence("once"); setObCurrency("USD"); setCategory(""); setRecurrenceEnd(null)
+    setRecurrence("once"); setObCurrency("USD"); setCategory(""); setStatus("planned"); setRecurrenceEnd(null)
+  }
+
+  function startAdd() {
+    setEditingId(null); setAdding(true)
+    setName(""); setAmount(""); setDueDate(todayIso())
+    setRecurrence("monthly"); setObCurrency("USD"); setCategory(""); setStatus("planned"); setRecurrenceEnd(null)
   }
 
   function startEdit(o: Obligation) {
-    setEditingId(o.id)
+    setAdding(false); setEditingId(o.id)
     setName(o.name)
     setAmount(String(o.amount))
     setDueDate(o.due_date)
     setRecurrence(o.recurrence)
     setObCurrency(o.currency)
     setCategory(o.category ?? "")
+    setStatus(o.status)
     setRecurrenceEnd(o.recurrence_end)
-    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   async function save(e: React.FormEvent) {
@@ -141,8 +228,9 @@ export default function Plans() {
       currency: obCurrency,
       due_date: dueDate,
       recurrence,
-      recurrence_end: recurrenceEnd,
+      recurrence_end: recurrence === "once" ? null : recurrenceEnd,
       category: category.trim() || null,
+      status,
     }
     if (editingId !== null) await api.patch(`/obligations/${editingId}`, body)
     else await api.post("/obligations", body)
@@ -151,93 +239,195 @@ export default function Plans() {
     void refreshCurrencies()
   }
 
-  const setObStatus = (id: number, status: string) =>
-    api.patch(`/obligations/${id}`, { status }).then(load)
+  const setObStatus = (id: number, s: string) =>
+    api.patch(`/obligations/${id}`, { status: s }).then(load)
 
   const today = todayIso()
 
+  const { recurRows, onceRows } = useMemo(() => {
+    const visible = obligations.filter((o) =>
+      filter === "all" ? true : filter === "recur" ? o.recurrence !== "once" : o.recurrence === "once")
+    return {
+      recurRows: visible.filter((o) => o.recurrence !== "once"),
+      onceRows: visible.filter((o) => o.recurrence === "once"),
+    }
+  }, [obligations, filter])
+
+  // ── строка чтения ──────────────────────────────────────────────────────────
+  const ReadRow = (o: Obligation) => {
+    const recur = o.recurrence !== "once"
+    const occ = o.status === "planned" ? nextOccurrence(o.due_date, o.recurrence, today) : o.due_date
+    return (
+      <div key={o.id}
+        className={cn("group relative mx-1 rounded-[10px] px-4 py-3 transition-colors hover:bg-card-2",
+          o.status === "cancelled" && "opacity-45")}>
+        <div className={GRID}>
+          <span className={cn("grid h-10 w-10 place-items-center rounded-[10px] border",
+            recur ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2")}>
+            <DotsIcon />
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[14.5px] font-medium tracking-[-0.01em]">
+              <span className="truncate">{o.name}</span>
+              {recur ? (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent-soft py-0.5 pl-1.5 pr-[7px] text-[11px] font-semibold text-primary">
+                  <Repeat />{REC_SHORT[o.recurrence]}
+                </span>
+              ) : (
+                <span className="shrink-0 rounded-md border border-border bg-card-2 px-2 py-0.5 text-[11px] font-semibold text-ink-3">разовый</span>
+              )}
+            </div>
+            {o.category && <div className="mt-[3px] text-[12.5px] text-ink-3">{o.category}</div>}
+          </div>
+          <span className="whitespace-nowrap text-[13px] text-ink-2">{REC_LABEL[o.recurrence]}</span>
+          <span className="tnum whitespace-nowrap text-[13px] text-ink-2">{ddmm(occ)}</span>
+          <span className="block text-left">
+            <span className="tnum block whitespace-nowrap text-[15.5px] font-semibold text-neg">−{money(o.amount)} {o.currency}</span>
+            {o.currency !== base && <BaseAside cur={base} value={conv(o.amount, o.currency)} sign="−" />}
+          </span>
+          <span className="flex min-w-0 justify-start"><StatusChip status={o.status} /></span>
+        </div>
+        {/* hover actions */}
+        <div className="pointer-events-none absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center gap-1 bg-gradient-to-l from-card-2 from-[28%] to-transparent pl-9 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+          <button type="button" title="Редактировать" onClick={() => startEdit(o)}
+            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+            <EditIcon />
+          </button>
+          {o.status === "planned" ? (
+            <>
+              <button type="button"
+                title={recur ? "оплатить за этот период → перейти к следующему" : undefined}
+                onClick={() => setObStatus(o.id, "paid")}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-[11px] text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos">
+                <CheckIcon />Оплачено
+              </button>
+              <button type="button" title="Отменить" onClick={() => setObStatus(o.id, "cancelled")}
+                className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+                ✕
+              </button>
+            </>
+          ) : (
+            <button type="button" title="Вернуть в план" onClick={() => setObStatus(o.id, "planned")}
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-[11px] text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+              Вернуть
+            </button>
+          )}
+          <button type="button" title="Удалить" onClick={() => api.delete(`/obligations/${o.id}`).then(load)}
+            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg">
+            <TrashIcon />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── строка формы (добавление/редактирование) — та же сетка ───────────────────
+  const recurForm = recurrence !== "once"
+  const FormRow = (
+    <form key={editingId ?? "new"} onSubmit={save}
+      className={cn(GRID, "relative mx-1 my-1.5 rounded-[10px] bg-card px-4 py-3 shadow-[0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]")}
+      data-coach="expense-form">
+      {editingId === null && (
+        <div className="col-span-full mb-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink-2">
+          <span className="text-primary"><PlusIcon className="h-[15px] w-[15px]" /></span>Новый расход
+        </div>
+      )}
+      <span className={cn("grid h-10 w-10 place-items-center rounded-[10px] border",
+        recurForm ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2")}>
+        {editingId === null ? <PlusIcon className="h-[17px] w-[17px]" /> : <DotsIcon />}
+      </span>
+      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Статья расхода" aria-label="Статья" required className="h-[38px]" />
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" placeholder="0" aria-label="Сумма" required className="tnum h-[38px] min-w-0 font-medium" />
+        <CurrencySelect value={obCurrency} onChange={setObCurrency} className="h-[38px] w-[72px]" />
+      </div>
+      <Select value={recurrence} onValueChange={(v) => { setRecurrence(v); if (v === "once") setRecurrenceEnd(null) }}>
+        <SelectTrigger className="h-[38px]" aria-label="Периодичность"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {REC_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" aria-label="Срок" required className="h-[38px]" />
+      <Select value={status} onValueChange={setStatus}>
+        <SelectTrigger className="h-[38px]" aria-label="Статус"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="planned">Запланировано</SelectItem>
+          <SelectItem value="paid">Оплачено</SelectItem>
+          <SelectItem value="cancelled">Отменено</SelectItem>
+        </SelectContent>
+      </Select>
+      <div className="col-span-full mt-2 flex flex-wrap items-center gap-2.5 border-t border-line-2 pt-3">
+        <RefCombo options={categories} value={category} onChange={setCategory} placeholder="Категория" />
+        {recurForm && (
+          <Input value={recurrenceEnd ?? ""} onChange={(e) => setRecurrenceEnd(e.target.value || null)}
+            type="date" className="h-[38px] w-40" title="Повтор до (необязательно)" placeholder="до" />
+        )}
+        <div className="flex-1" />
+        <Button type="button" variant="ghost" onClick={resetForm}>Отмена</Button>
+        {editingId !== null && (
+          <Button type="button" variant="outline" onClick={() => api.delete(`/obligations/${editingId}`).then(() => { resetForm(); void load() })}>
+            Удалить
+          </Button>
+        )}
+        <Button type="submit">{editingId !== null ? "Сохранить" : "Добавить расход"}</Button>
+      </div>
+    </form>
+  )
+
+  const GroupLabel = ({ text, n }: { text: string; n: number }) => (
+    <div className="flex items-center gap-2 px-4 pb-[7px] pt-3.5 text-[11.5px] font-semibold uppercase tracking-[0.05em] text-ink-3">
+      {text}
+      <span className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full border border-border bg-card-2 px-1.5 text-[11px] font-semibold text-ink-2">{n}</span>
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-6">
-      {expenses && <ExpensesSummary data={expenses} />}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{editingId !== null ? "Редактировать расход" : "Предстоящие расходы"}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <form onSubmit={save} className="flex flex-wrap items-center gap-2">
-            <Input value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="Аренда, школа, билеты…" required className="w-52" />
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)}
-              type="number" step="any" placeholder="Сумма" required className="w-28" />
-            <CurrencySelect value={obCurrency} onChange={setObCurrency} />
-            <Input value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-              type="date" required className="w-40" />
-            <Select value={recurrence} onValueChange={(v) => { setRecurrence(v); if (v === "once") setRecurrenceEnd(null) }}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="once">разово</SelectItem>
-                <SelectItem value="weekly">еженедельно</SelectItem>
-                <SelectItem value="monthly">ежемесячно</SelectItem>
-                <SelectItem value="yearly">ежегодно</SelectItem>
-              </SelectContent>
-            </Select>
-            {recurrence !== "once" && (
-              <Input value={recurrenceEnd ?? ""} onChange={(e) => setRecurrenceEnd(e.target.value || null)}
-                type="date" className="w-40" title="Повтор до (необязательно)" placeholder="до" />
-            )}
-            <RefCombo options={categories} value={category} onChange={setCategory} placeholder="Категория" />
-            <Button type="submit">{editingId !== null ? "Сохранить" : "Добавить"}</Button>
-            {editingId !== null && (
-              <Button type="button" variant="ghost" onClick={resetForm}>Отмена</Button>
-            )}
-          </form>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16">Дата</TableHead>
-                <TableHead>Что</TableHead>
-                <TableHead className="text-right">Сумма</TableHead>
-                <TableHead className="w-20">Повтор</TableHead>
-                <TableHead className="w-24">Статус</TableHead>
-                <TableHead className="w-56" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {obligations.map((o) => (
-                <TableRow key={o.id} className={
-                  editingId === o.id ? "bg-muted/50" : o.status !== "planned" ? "opacity-45" : undefined
-                }>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {ddmm(o.status === "planned" ? nextOccurrence(o.due_date, o.recurrence, today) : o.due_date)}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {o.name}
-                    {o.category && <span className="ml-2 text-xs text-muted-foreground">{o.category}</span>}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-red-600">−{money(o.amount)} {o.currency}</TableCell>
-                  <TableCell className="text-muted-foreground">{REC_LABEL[o.recurrence]}</TableCell>
-                  <TableCell>
-                    <Badge variant={o.status === "planned" ? "secondary" : "outline"}>{OB_STATUS[o.status]}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <GhostBtn onClick={() => startEdit(o)}>✎</GhostBtn>
-                    {o.status === "planned" ? (
-                      <>
-                        <GhostBtn
-                          title={o.recurrence !== "once" ? "оплатить за этот период → перейти к следующему" : undefined}
-                          onClick={() => setObStatus(o.id, "paid")}>оплачено</GhostBtn>
-                        <GhostBtn onClick={() => setObStatus(o.id, "cancelled")}>отмена</GhostBtn>
-                      </>
-                    ) : (
-                      <GhostBtn onClick={() => setObStatus(o.id, "planned")}>вернуть</GhostBtn>
-                    )}
-                    <GhostBtn className="h-7 px-2 text-xs text-red-500" onClick={() => api.delete(`/obligations/${o.id}`).then(load)}>✕</GhostBtn>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
+      <div className="flex items-start justify-between gap-5">
+        <SectionHelp route="/plans" title="Расходы">
+          Регулярные и разовые платежи (аренда, подписки, налоги). Внизу видно, сколько нужно зарабатывать в месяц, чтобы не уходить в минус. Всё это вычитается из прогноза.
+        </SectionHelp>
+        {!adding && editingId === null && (
+          <Button onClick={startAdd} className="shrink-0"><PlusIcon className="h-4 w-4" />Добавить расход</Button>
+        )}
+      </div>
+
+      {expenses && <Breakeven data={expenses} />}
+
+      <Card className="gap-0 px-2 pb-3 pt-2">
+        <div className="flex items-center justify-between gap-3.5 px-4 pb-3 pt-3.5">
+          <h3 className="text-[15.5px] font-semibold tracking-[-0.02em]">Обязательства</h3>
+          <div className="flex gap-px rounded-lg border border-border bg-card-2 p-[3px]">
+            {([["all", "Все"], ["recur", "Регулярные"], ["once", "Разовые"]] as const).map(([f, label]) => (
+              <button key={f} type="button" onClick={() => setFilter(f)}
+                className={cn("whitespace-nowrap rounded-md px-3 py-[5px] text-[12.5px] font-medium transition-colors",
+                  filter === f ? "bg-card text-foreground shadow-sm" : "text-ink-3 hover:text-ink-2")}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(adding || editingId !== null) && FormRow}
+
+        {recurRows.length === 0 && onceRows.length === 0 && !adding && editingId === null && (
+          <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Пока пусто — добавь первый расход.
+          </p>
+        )}
+
+        {recurRows.length > 0 && (
+          <>
+            <GroupLabel text="Регулярные" n={recurRows.length} />
+            {recurRows.map((o) => (editingId === o.id ? null : ReadRow(o)))}
+          </>
+        )}
+        {onceRows.length > 0 && (
+          <>
+            <GroupLabel text="Разовые" n={onceRows.length} />
+            {onceRows.map((o) => (editingId === o.id ? null : ReadRow(o)))}
+          </>
+        )}
       </Card>
     </div>
   )

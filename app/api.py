@@ -1,10 +1,24 @@
 """REST API: ТЗ §7. JSON, Bearer-токен (если настроен)."""
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from pydantic import BaseModel, Field
+
+# Денежные суммы строго положительны: отрицательное обязательство = фантомный доход (#12).
+Amount = Annotated[float, Field(gt=0)]
+# Длины строк держим в паритете с колонками БД (SQLite не enforce-ит, Postgres рубит → 500).
+# Отдаём 422 на обоих бэкендах вместо StringDataRightTruncation (#13/#18/#19).
+Currency = Annotated[str, Field(min_length=1, max_length=12)]
+Name80 = Annotated[str, Field(max_length=80)]
+Name120 = Annotated[str, Field(max_length=120)]
+Note = Annotated[str, Field(max_length=300)]
+Ref80 = Annotated[str, Field(max_length=80)]
+ImageUrl = Annotated[str, Field(max_length=500)]
+ImageSource = Annotated[str, Field(max_length=40)]
+# Горизонт планирования — тот же диапазон, что и Query у /forecast (#11).
+HorizonDays = Annotated[int, Field(ge=7, le=730)]
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,7 +30,8 @@ from .db import (
 from .forecast import next_period
 from .service import (
     course_summary, expenses_summary, forecast_from_db, get_course_config, get_settings,
-    income_summary, rates_overview, snapshots_history, upsert_snapshot, wishes_summary,
+    income_summary, rates_overview, rebase_currency, snapshots_history, upsert_snapshot,
+    wishes_summary,
 )
 
 
@@ -60,15 +75,15 @@ def require_token(request: Request):
 # ---------- schemas ----------
 
 class AccountIn(BaseModel):
-    name: str
-    currency: str
+    name: Name80
+    currency: Currency
     type: str = "bank"
     sort_order: int = 0
 
 
 class AccountPatch(BaseModel):
-    name: str | None = None
-    currency: str | None = None
+    name: Name80 | None = None
+    currency: Currency | None = None
     type: str | None = None
     is_active: bool | None = None
     sort_order: int | None = None
@@ -94,55 +109,55 @@ CardSize = Literal["small", "square", "tall", "wide", "large", "auto"]
 
 
 class ObligationIn(BaseModel):
-    name: str
-    amount: float
-    currency: str
+    name: Name120
+    amount: Amount
+    currency: Currency
     due_date: date
     recurrence: Recurrence = "once"
     recurrence_end: date | None = None
-    category: str | None = None
-    note: str | None = None
+    category: Ref80 | None = None
+    note: Note | None = None
 
 
 class ObligationPatch(BaseModel):
-    name: str | None = None
-    amount: float | None = None
-    currency: str | None = None
+    name: Name120 | None = None
+    amount: Amount | None = None
+    currency: Currency | None = None
     due_date: date | None = None
     recurrence: Recurrence | None = None
     recurrence_end: date | None = None
     status: ObStatus | None = None
-    category: str | None = None
-    note: str | None = None
+    category: Ref80 | None = None
+    note: Note | None = None
 
 
 class RefIn(BaseModel):
-    name: str
+    name: Ref80
 
 
 class WishIn(BaseModel):
-    name: str
-    amount: float
-    currency: str
+    name: Name120
+    amount: Amount
+    currency: Currency
     priority: WishPriority = "medium"
     target_date: date | None = None
-    category: str | None = None
-    note: str | None = None
-    image_url: str | None = None
-    image_source: str | None = None
+    category: Ref80 | None = None
+    note: Note | None = None
+    image_url: ImageUrl | None = None
+    image_source: ImageSource | None = None
 
 
 class WishPatch(BaseModel):
-    name: str | None = None
-    amount: float | None = None
-    currency: str | None = None
+    name: Name120 | None = None
+    amount: Amount | None = None
+    currency: Currency | None = None
     priority: WishPriority | None = None
     target_date: date | None = None
-    category: str | None = None
+    category: Ref80 | None = None
     status: WishStatus | None = None
-    note: str | None = None
-    image_url: str | None = None
-    image_source: str | None = None
+    note: Note | None = None
+    image_url: ImageUrl | None = None
+    image_source: ImageSource | None = None
     card_size: CardSize | None = None  # small | square | tall | wide | large | auto
 
 
@@ -150,80 +165,89 @@ class WishImageUrl(BaseModel):
     url: str
 
 
+class WishReorder(BaseModel):
+    ids: list[int]  # желания в желаемом порядке (первое = sort_order 0)
+
+
 class InflowIn(BaseModel):
-    name: str | None = None
-    amount: float
-    currency: str
+    name: Name120 | None = None
+    amount: Amount
+    currency: Currency
     expected_date: date
     probability: Probability = "confirmed"
-    counterparty: str | None = None
-    direction: str | None = None
-    note: str | None = None
+    recurrence: Recurrence = "once"
+    recurrence_end: date | None = None
+    counterparty: Name120 | None = None
+    direction: Ref80 | None = None
+    note: Note | None = None
 
 
 class InflowPatch(BaseModel):
-    name: str | None = None
-    amount: float | None = None
-    currency: str | None = None
+    name: Name120 | None = None
+    amount: Amount | None = None
+    currency: Currency | None = None
     expected_date: date | None = None
     probability: Probability | None = None
+    recurrence: Recurrence | None = None
+    recurrence_end: date | None = None
     status: InflowStatus | None = None
-    counterparty: str | None = None
-    direction: str | None = None
-    note: str | None = None
+    counterparty: Name120 | None = None
+    direction: Ref80 | None = None
+    note: Note | None = None
 
 
 class IncomeIn(BaseModel):
     """Быстрая запись факта: «заработал X от Y по направлению Z»."""
-    amount: float
-    currency: str
-    counterparty: str | None = None
-    direction: str | None = None
-    name: str | None = None
+    amount: Amount
+    currency: Currency
+    counterparty: Name120 | None = None
+    direction: Ref80 | None = None
+    name: Name120 | None = None
     received_date: date | None = None
 
 
 class SettingsPatch(BaseModel):
-    base_currency: str | None = None
+    base_currency: Currency | None = None
     cushion: float | None = None
-    horizon_days: int | None = None
+    horizon_days: HorizonDays | None = None
     manual_burn_weekly: float | None = None
+    display_name: Name120 | None = None
 
 
 class FxIn(BaseModel):
-    currency: str
-    rate_to_base: float
+    currency: Currency
+    rate_to_base: Amount  # > 0: нулевой/отрицательный курс ломает конвертацию (#15)
     rate_date: date | None = None
 
 
 class CourseTariffIn(BaseModel):
-    name: str
-    price: float
-    currency: str
+    name: Name80
+    price: Amount
+    currency: Currency
     students: int = 0
     sort_order: int = 0
 
 
 class CourseTariffPatch(BaseModel):
-    name: str | None = None
-    price: float | None = None
-    currency: str | None = None
+    name: Name80 | None = None
+    price: Amount | None = None
+    currency: Currency | None = None
     students: int | None = None
     sort_order: int | None = None
 
 
 class CourseCostIn(BaseModel):
-    name: str
-    amount: float
-    currency: str
+    name: Name80
+    amount: Amount
+    currency: Currency
     kind: str = "monthly"  # monthly | per_student
     sort_order: int = 0
 
 
 class CourseCostPatch(BaseModel):
-    name: str | None = None
-    amount: float | None = None
-    currency: str | None = None
+    name: Name80 | None = None
+    amount: Amount | None = None
+    currency: Currency | None = None
     kind: str | None = None
     sort_order: int | None = None
 
@@ -261,9 +285,10 @@ def create_account(body: AccountIn, db: Session = Depends(get_db)):
 def patch_account(acc_id: int, body: AccountPatch, db: Session = Depends(get_db)):
     a = db.get(Account, acc_id)
     if a is None:
-        raise HTTPException(404)
-    for field, value in body.model_dump(exclude_none=True).items():
-        setattr(a, field, value.upper() if field == "currency" else value)
+        raise HTTPException(404, f"unknown account {acc_id}")
+    # exclude_unset (не exclude_none): явный null очищает nullable-поле, а не молча отбрасывается (#14)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(a, field, value.upper() if field == "currency" and value is not None else value)
     db.commit()
     return {"ok": True}
 
@@ -272,7 +297,7 @@ def patch_account(acc_id: int, body: AccountPatch, db: Session = Depends(get_db)
 def delete_account(acc_id: int, db: Session = Depends(get_db)):
     a = db.get(Account, acc_id)
     if a is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown account {acc_id}")
     a.is_active = False  # soft: история снимков остаётся
     db.commit()
     return {"ok": True}
@@ -286,7 +311,10 @@ def create_snapshot(body: SnapshotIn, db: Session = Depends(get_db)):
     for item in body.items:
         if db.get(Account, item.account_id) is None:
             raise HTTPException(400, f"unknown account_id {item.account_id}")
-    n = upsert_snapshot(db, taken_at, [(i.account_id, dec(i.amount)) for i in body.items])
+    # дедуп по account_id (последний выигрывает) — upsert всё равно схлопывает дубли,
+    # поэтому возвращаемый count должен совпадать с реально сохранёнными строками (#17)
+    deduped = {i.account_id: dec(i.amount) for i in body.items}
+    n = upsert_snapshot(db, taken_at, list(deduped.items()))
     return {"taken_at": taken_at.isoformat(), "items": n}
 
 
@@ -386,8 +414,8 @@ def create_obligation(body: ObligationIn, db: Session = Depends(get_db)):
 def patch_obligation(ob_id: int, body: ObligationPatch, db: Session = Depends(get_db)):
     o = db.get(ObligationRow, ob_id)
     if o is None:
-        raise HTTPException(404)
-    data = body.model_dump(exclude_none=True)
+        raise HTTPException(404, f"unknown obligation {ob_id}")
+    data = body.model_dump(exclude_unset=True)  # явный null очищает nullable-поле (#14)
     # повторяющееся + «оплачено» → не закрываем серию, а двигаем на следующий платёж
     if data.get("status") == "paid" and o.recurrence != "once":
         # Следующее наступление on-or-after сегодня — это и есть следующий платёж.
@@ -405,9 +433,9 @@ def patch_obligation(ob_id: int, body: ObligationPatch, db: Session = Depends(ge
             o.status = "planned"
         data.pop("status", None)
     for field, value in data.items():
-        if field == "amount":
+        if field == "amount" and value is not None:
             value = dec(value)
-        if field == "currency":
+        if field == "currency" and value is not None:
             value = value.upper()
         setattr(o, field, value)
     db.commit()
@@ -418,7 +446,7 @@ def patch_obligation(ob_id: int, body: ObligationPatch, db: Session = Depends(ge
 def delete_obligation(ob_id: int, db: Session = Depends(get_db)):
     o = db.get(ObligationRow, ob_id)
     if o is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown obligation {ob_id}")
     db.delete(o)
     db.commit()
     return {"ok": True}
@@ -432,6 +460,8 @@ def list_inflows(db: Session = Depends(get_db)):
     return [
         {"id": i.id, "name": i.name, "amount": float(i.amount), "currency": i.currency,
          "expected_date": i.expected_date.isoformat(), "probability": i.probability,
+         "recurrence": i.recurrence or "once",
+         "recurrence_end": i.recurrence_end.isoformat() if i.recurrence_end else None,
          "status": i.status, "counterparty": i.counterparty, "direction": i.direction,
          "note": i.note}
         for i in rows
@@ -444,6 +474,7 @@ def create_inflow(body: InflowIn, db: Session = Depends(get_db)):
         name=body.name or body.counterparty or "Поступление",
         amount=dec(body.amount), currency=body.currency.upper(),
         expected_date=body.expected_date, probability=body.probability,
+        recurrence=body.recurrence, recurrence_end=body.recurrence_end,
         counterparty=body.counterparty, direction=body.direction, note=body.note,
     )
     db.add(i)
@@ -501,11 +532,11 @@ def create_course_tariff(body: CourseTariffIn, db: Session = Depends(get_db)):
 def patch_course_tariff(tariff_id: int, body: CourseTariffPatch, db: Session = Depends(get_db)):
     t = db.get(CourseTariff, tariff_id)
     if t is None:
-        raise HTTPException(404)
-    for field, value in body.model_dump(exclude_none=True).items():
-        if field == "price":
+        raise HTTPException(404, f"unknown course tariff {tariff_id}")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        if field == "price" and value is not None:
             value = dec(value)
-        if field == "currency":
+        if field == "currency" and value is not None:
             value = value.upper()
         setattr(t, field, value)
     db.commit()
@@ -516,7 +547,7 @@ def patch_course_tariff(tariff_id: int, body: CourseTariffPatch, db: Session = D
 def delete_course_tariff(tariff_id: int, db: Session = Depends(get_db)):
     t = db.get(CourseTariff, tariff_id)
     if t is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown course tariff {tariff_id}")
     db.delete(t)
     db.commit()
     return {"ok": True}
@@ -537,11 +568,11 @@ def create_course_cost(body: CourseCostIn, db: Session = Depends(get_db)):
 def patch_course_cost(cost_id: int, body: CourseCostPatch, db: Session = Depends(get_db)):
     c = db.get(CourseCost, cost_id)
     if c is None:
-        raise HTTPException(404)
-    for field, value in body.model_dump(exclude_none=True).items():
-        if field == "amount":
+        raise HTTPException(404, f"unknown course cost {cost_id}")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        if field == "amount" and value is not None:
             value = dec(value)
-        if field == "currency":
+        if field == "currency" and value is not None:
             value = value.upper()
         setattr(c, field, value)
     db.commit()
@@ -552,7 +583,7 @@ def patch_course_cost(cost_id: int, body: CourseCostPatch, db: Session = Depends
 def delete_course_cost(cost_id: int, db: Session = Depends(get_db)):
     c = db.get(CourseCost, cost_id)
     if c is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown course cost {cost_id}")
     db.delete(c)
     db.commit()
     return {"ok": True}
@@ -593,7 +624,7 @@ def _ref_router(prefix: str, model):
     def _del(ref_id: int, db: Session = Depends(get_db)):
         row = db.get(model, ref_id)
         if row is None:
-            raise HTTPException(404)
+            raise HTTPException(404, f"unknown {prefix} {ref_id}")
         db.delete(row)
         db.commit()
         return {"ok": True}
@@ -626,15 +657,26 @@ def create_wish(body: WishIn, db: Session = Depends(get_db)):
     return {"id": w.id}
 
 
+@router.post("/wishes/reorder", dependencies=[Depends(require_token)])
+def reorder_wishes(body: WishReorder, db: Session = Depends(get_db)):
+    """Ручной порядок на Доске: проставляет sort_order = позиция в присланном списке."""
+    for position, wid in enumerate(body.ids):
+        w = db.get(Wish, wid)
+        if w is not None:
+            w.sort_order = position
+    db.commit()
+    return {"ok": True}
+
+
 @router.patch("/wishes/{wish_id}", dependencies=[Depends(require_token)])
 def patch_wish(wish_id: int, body: WishPatch, db: Session = Depends(get_db)):
     w = db.get(Wish, wish_id)
     if w is None:
-        raise HTTPException(404)
-    for field, value in body.model_dump(exclude_none=True).items():
-        if field == "amount":
+        raise HTTPException(404, f"unknown wish {wish_id}")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        if field == "amount" and value is not None:
             value = dec(value)
-        if field == "currency":
+        if field == "currency" and value is not None:
             value = value.upper()
         setattr(w, field, value)
     db.commit()
@@ -645,7 +687,7 @@ def patch_wish(wish_id: int, body: WishPatch, db: Session = Depends(get_db)):
 def delete_wish(wish_id: int, db: Session = Depends(get_db)):
     w = db.get(Wish, wish_id)
     if w is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown wish {wish_id}")
     db.delete(w)
     db.commit()
     return {"ok": True}
@@ -656,7 +698,7 @@ def promote_wish(wish_id: int, db: Session = Depends(get_db)):
     """Хотелка → обязательство (попадает в прогноз), сама помечается купленной."""
     w = db.get(Wish, wish_id)
     if w is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown wish {wish_id}")
     o = ObligationRow(
         name=w.name, amount=w.amount, currency=w.currency,
         due_date=w.target_date or date.today(), recurrence="once",
@@ -678,11 +720,14 @@ def set_wish_image_url(request: Request, wish_id: int, body: WishImageUrl,
     """Картинку по ссылке: скачиваем по URL и сохраняем у себя на сервере (не хотлинк)."""
     w = db.get(Wish, wish_id)
     if w is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown wish {wish_id}")
     if not images.is_safe_remote_url(body.url):
         raise HTTPException(400, "unsafe url")
     data = images.fetch_bytes(body.url)
     if not data:
+        return {"ok": False, "image_url": None, "image_source": None}
+    # фетч-ответ может быть не картинкой (внутренний JSON/HTML при SSRF) — не храним и не отдаём (#28/#29)
+    if not images.is_real_image(data):
         return {"ok": False, "image_url": None, "image_source": None}
     fname = images.save_wish_image(request.app.state.image_dir, wish_id, data)
     w.image_url = f"/wish-images/{fname}"
@@ -697,12 +742,15 @@ async def upload_wish_image(request: Request, wish_id: int, file: UploadFile = F
     """Картинку файлом: загруженный файл сохраняем на сервере."""
     w = db.get(Wish, wish_id)
     if w is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown wish {wish_id}")
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(400, "not an image")
     data = await file.read()
     if not data or len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(400, "empty or too large (>15MB)")
+    # content_type клиент-контролируем — проверяем сами магические байты (#29)
+    if not images.is_real_image(data):
+        raise HTTPException(400, "not a decodable image")
     fname = images.save_wish_image(request.app.state.image_dir, wish_id, data)
     w.image_url = f"/wish-images/{fname}"
     w.image_source = "upload"
@@ -714,11 +762,11 @@ async def upload_wish_image(request: Request, wish_id: int, file: UploadFile = F
 def patch_inflow(inf_id: int, body: InflowPatch, db: Session = Depends(get_db)):
     i = db.get(InflowRow, inf_id)
     if i is None:
-        raise HTTPException(404)
-    for field, value in body.model_dump(exclude_none=True).items():
-        if field == "amount":
+        raise HTTPException(404, f"unknown inflow {inf_id}")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        if field == "amount" and value is not None:
             value = dec(value)
-        if field == "currency":
+        if field == "currency" and value is not None:
             value = value.upper()
         setattr(i, field, value)
     db.commit()
@@ -729,7 +777,7 @@ def patch_inflow(inf_id: int, body: InflowPatch, db: Session = Depends(get_db)):
 def delete_inflow(inf_id: int, db: Session = Depends(get_db)):
     i = db.get(InflowRow, inf_id)
     if i is None:
-        raise HTTPException(404)
+        raise HTTPException(404, f"unknown inflow {inf_id}")
     db.delete(i)
     db.commit()
     return {"ok": True}
@@ -745,21 +793,32 @@ def read_settings(db: Session = Depends(get_db)):
         "cushion": float(s.cushion),
         "horizon_days": s.horizon_days,
         "manual_burn_weekly": float(s.manual_burn_weekly) if s.manual_burn_weekly is not None else None,
+        "display_name": s.display_name,
     }
 
 
 @router.patch("/settings", dependencies=[Depends(require_token)])
 def patch_settings(body: SettingsPatch, db: Session = Depends(get_db)):
     s = get_settings(db)
-    data = body.model_dump(exclude_none=True)
-    if "cushion" in data:
+    data = body.model_dump(exclude_unset=True)  # явный null очищает поле (#14)
+    if data.get("base_currency"):
+        new_base = data["base_currency"].upper()
+        if new_base != s.base_currency:
+            try:
+                rebase_currency(db, s.base_currency, new_base)  # пересчёт курсов в новую базу
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            s.base_currency = new_base
+    if data.get("cushion") is not None:
         s.cushion = dec(data["cushion"])
-    if "base_currency" in data:
-        s.base_currency = data["base_currency"].upper()
-    if "horizon_days" in data:
-        s.horizon_days = data["horizon_days"]
+    if data.get("horizon_days") is not None:
+        s.horizon_days = data["horizon_days"]  # диапазон 7..730 проверяет схема (#11)
     if "manual_burn_weekly" in data:
-        s.manual_burn_weekly = dec(data["manual_burn_weekly"])
+        v = data["manual_burn_weekly"]
+        s.manual_burn_weekly = dec(v) if v is not None else None  # null → авто-burn
+    if "display_name" in data:
+        name = (data["display_name"] or "").strip()
+        s.display_name = name or None
     db.commit()
     return {"ok": True}
 
@@ -772,7 +831,9 @@ def list_rates(db: Session = Depends(get_db)):
 @router.post("/fx", status_code=201, dependencies=[Depends(require_token)])
 def add_fx(body: FxIn, db: Session = Depends(get_db)):
     rate_date = body.rate_date or date.today()
-    cur = body.currency.upper()
+    cur = body.currency.strip().upper()
+    if not cur:  # пробельная валюта = призрачная строка в /rates (#15)
+        raise HTTPException(422, "currency must not be blank")
     # upsert: ручной курс заменяет курс того же дня (в т.ч. авто-фетч)
     for old in db.scalars(select(FxRate).where(FxRate.rate_date == rate_date, FxRate.currency == cur)).all():
         db.delete(old)
@@ -790,8 +851,12 @@ def refresh_fx(request: Request):
 # ---------- forecast / summary ----------
 
 @router.get("/forecast", dependencies=[Depends(require_token)])
-def forecast(db: Session = Depends(get_db)):
-    result, settings, _ = forecast_from_db(db)
+def forecast(
+    db: Session = Depends(get_db),
+    horizon: int | None = Query(None, ge=7, le=730),
+):
+    # дашборд-дропдаун периода передаёт горизонт; без параметра — настройка по умолчанию
+    result, settings, _ = forecast_from_db(db, horizon_days=horizon)
     return {
         "cushion": float(settings.cushion),
         "scenarios": {
@@ -802,8 +867,14 @@ def forecast(db: Session = Depends(get_db)):
 
 
 @router.get("/summary", dependencies=[Depends(require_token)])
-def summary(db: Session = Depends(get_db)):
-    result, settings, extras = forecast_from_db(db)
+def summary(
+    db: Session = Depends(get_db),
+    horizon: int | None = Query(None, ge=7, le=730),
+):
+    # Дашборд-дропдаун периода передаёт горизонт И сюда — иначе карточки (запас/min/gap)
+    # считаются на фикс. 180д и противоречат графику /forecast?horizon (#1/#22).
+    result, settings, extras = forecast_from_db(db, horizon_days=horizon)
+    used_horizon = horizon if horizon is not None else settings.horizon_days
     return {
         "t0": float(result.t0),
         "t0_by_currency": {c: float(a) for c, a in result.t0_by_currency.items()},
@@ -817,7 +888,7 @@ def summary(db: Session = Depends(get_db)):
         "rates_date": extras["rates_date"].isoformat() if extras["rates_date"] else None,
         "base_currency": settings.base_currency,
         "cushion": float(settings.cushion),
-        "horizon_days": settings.horizon_days,
+        "horizon_days": used_horizon,
         "scenarios": {
             name: {
                 "min_total": float(sc.min_total) if sc.min_total is not None else None,

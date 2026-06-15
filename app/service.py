@@ -1,5 +1,5 @@
 """Сборка входов forecast-движка из БД."""
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -11,7 +11,7 @@ from .db import (
     Account, CourseConfigRow, CourseCost, CourseTariff, FxRate, InflowRow, ObligationRow,
     SettingsRow, SnapshotRow, Wish,
 )
-from .forecast import SCENARIO_WEIGHTS, Inflow, Obligation, Snap, build_forecast
+from .forecast import SCENARIO_WEIGHTS, Inflow, Obligation, Snap, _occurrences, build_forecast
 from .fx import _used_currencies
 
 STALE_AFTER_DAYS = 10
@@ -47,11 +47,43 @@ def get_settings(db: Session) -> SettingsRow:
     return s
 
 
+def rebase_currency(db: Session, old_base: str, new_base: str) -> None:
+    """Смена базовой валюты: пересчитывает хранимые курсы в новую базу (без сети).
+    Новая база становится неявной 1; старая база и прочие валюты получают курс к новой,
+    исходя из последних известных курсов. Бросает ValueError, если для новой базы нет
+    известного курса — иначе нечем выразить старую базу в новой. Не коммитит (коммитит вызывающий)."""
+    old_base, new_base = old_base.upper(), new_base.upper()
+    if new_base == old_base:
+        return
+    latest: dict = {}
+    latest_date: dict = {}
+    for r in db.scalars(select(FxRate).order_by(FxRate.rate_date.asc(), FxRate.id.asc())).all():
+        latest[r.currency] = Decimal(r.rate_to_base)  # позднее перезаписывает раннее
+        latest_date[r.currency] = r.rate_date         # ...вместе со своей датой
+    r_new = latest.get(new_base)
+    if r_new is None or r_new == 0:
+        raise ValueError(f"нет курса для {new_base} — добавьте его перед сменой базы")
+    today = date.today()
+    for row in db.scalars(select(FxRate)).all():
+        db.delete(row)
+    db.flush()
+    # Несём вперёд исходную дату курса (не today!), иначе теряется сигнал устаревания
+    # на дашборде «курсы от {дата}» (#9). Дата старой базы = когда мы последний раз знали new_base.
+    db.add(FxRate(rate_date=latest_date.get(new_base, today), currency=old_base,
+                  rate_to_base=Decimal("1") / r_new))
+    for cur, r_old in latest.items():
+        if cur in (new_base, old_base):
+            continue
+        db.add(FxRate(rate_date=latest_date.get(cur, today), currency=cur,
+                      rate_to_base=r_old / r_new))
+
+
 def get_rates(db: Session, base_currency: str):
     """Последний известный курс по каждой валюте + дата самого свежего курса."""
     rates: dict = {base_currency: Decimal("1")}
     rates_date = None
-    rows = db.scalars(select(FxRate).order_by(FxRate.rate_date.asc())).all()
+    # тот же детерминированный тай-брейк (rate_date, id), что и rates_overview/rebase (#8)
+    rows = db.scalars(select(FxRate).order_by(FxRate.rate_date.asc(), FxRate.id.asc())).all()
     for row in rows:  # более поздние перезаписывают ранние
         rates[row.currency] = Decimal(row.rate_to_base)
         if rates_date is None or row.rate_date > rates_date:
@@ -121,15 +153,22 @@ def income_summary(db: Session):
             "counterparty": r.counterparty, "direction": r.direction,
             "amount": float(r.amount), "currency": r.currency, "amount_base": float(base),
         })
-    # пайплайн: ожидаемые поступления по вероятностям + по месяцам + взвешенно (базовый сценарий)
+    # пайплайн: ожидаемые поступления по вероятностям + по месяцам + взвешенно (базовый сценарий).
+    # Регулярные (recurrence != once) разворачиваются по горизонту, как в прогнозе; разовые — раз.
+    today = date.today()
+    horizon_end = today + timedelta(days=settings.horizon_days)
     by_prob = {"confirmed": Decimal("0"), "likely": Decimal("0"), "possible": Decimal("0")}
     exp_by_month: dict = {}
     for r in db.scalars(select(InflowRow).where(InflowRow.status == "expected")).all():
         base = Decimal(r.amount) * rates.get(r.currency, Decimal("0"))
-        if r.probability in by_prob:
-            by_prob[r.probability] += base
-        month = r.expected_date.strftime("%Y-%m")
-        exp_by_month[month] = exp_by_month.get(month, Decimal("0")) + base
+        rec = r.recurrence or "once"
+        occs = [r.expected_date] if rec == "once" else list(
+            _occurrences(r.expected_date, rec, r.recurrence_end, today, horizon_end))
+        for occ in occs:
+            if r.probability in by_prob:
+                by_prob[r.probability] += base
+            month = occ.strftime("%Y-%m")
+            exp_by_month[month] = exp_by_month.get(month, Decimal("0")) + base
     weights = SCENARIO_WEIGHTS["base"]
     weighted = sum((by_prob[p] * weights[p] for p in by_prob), Decimal("0"))
     expected = {
@@ -157,7 +196,10 @@ def wishes_summary(db: Session):
         select(Wish).where(Wish.status == "active").order_by(Wish.id.desc())
     ).all()
     order = {"high": 0, "medium": 1, "low": 2}
-    rows.sort(key=lambda w: (order.get(w.priority, 1), -w.id))
+    # ручной порядок (sort_order) — главный; приоритет и id — добивка для равных/изначальных.
+    # coalesce None→0: мигрированная wishes.sort_order бывает NULL, иначе сорт роняет 500 (#20)
+    rows.sort(key=lambda w: (w.sort_order if w.sort_order is not None else 0,
+                             order.get(w.priority, 1), -w.id))
 
     items, by_priority = [], {}
     for w in rows:
@@ -169,6 +211,7 @@ def wishes_summary(db: Session):
             "target_date": w.target_date.isoformat() if w.target_date else None,
             "category": w.category, "note": w.note,
             "image_url": w.image_url, "image_source": w.image_source, "card_size": w.card_size,
+            "sort_order": w.sort_order,
         })
     return {
         "base_currency": settings.base_currency,
@@ -178,10 +221,11 @@ def wishes_summary(db: Session):
     }
 
 
-def expenses_summary(db: Session):
+def expenses_summary(db: Session, precomputed=None):
     """Месячные расходы: планируемые обязательства, нормализованные в месяц, по категориям,
-    + burn в месяц, + сколько нужно зарабатывать в месяц (breakeven)."""
-    result, settings, _ = forecast_from_db(db)
+    + burn в месяц, + сколько нужно зарабатывать в месяц (breakeven).
+    precomputed=(result, settings) переиспользует уже посчитанный прогноз (#10)."""
+    result, settings = precomputed if precomputed is not None else forecast_from_db(db)[:2]
     rates, _ = get_rates(db, settings.base_currency)
     rows = db.scalars(select(ObligationRow).where(ObligationRow.status == "planned")).all()
 
@@ -199,7 +243,14 @@ def expenses_summary(db: Session):
 
     monthly_obligations = sum(by_category.values(), Decimal("0"))
     burn_monthly = result.burn_weekly * Decimal(52) / Decimal(12)
-    required = monthly_obligations + burn_monthly
+    # Когда burn ВЫВЕДЕН из снимков, он уже вобрал реальную трату по регулярным
+    # обязательствам — складывать его с monthly_obligations = двойной счёт breakeven
+    # (#3/#7). Берём бóльшую из величин: и не занижаем, и не дублируем. При manual/none
+    # burn (нет истории) обязательства в нём не сидят → прежняя сумма.
+    if result.burn_source == "derived":
+        required = max(monthly_obligations, burn_monthly)
+    else:
+        required = monthly_obligations + burn_monthly
     return {
         "base_currency": settings.base_currency,
         "by_category": {k: float(v) for k, v in by_category.items()},
@@ -245,10 +296,11 @@ def course_summary(db: Session):
                for c in cost_rows],
         rates=rates,
     )
-    # реальные расходы для сравнения: месячная планка, разовые предстоящие, дефицит до подушки
-    exp = expenses_summary(db)
+    # реальные расходы для сравнения: месячная планка, разовые предстоящие, дефицит до подушки.
+    # Считаем прогноз ОДИН раз и переиспользуем для expenses и gap (#10 — было два полных билда).
+    forecast, fc_settings, _ = forecast_from_db(db)
+    exp = expenses_summary(db, precomputed=(forecast, fc_settings))
     required = exp["required_monthly_income"]
-    forecast, _, _ = forecast_from_db(db)
 
     tariffs = [{
         "id": r.id, "name": r.name, "price": float(r.price), "currency": r.currency,
@@ -288,7 +340,7 @@ def course_summary(db: Session):
     }
 
 
-def forecast_from_db(db: Session, today: date | None = None):
+def forecast_from_db(db: Session, today: date | None = None, horizon_days: int | None = None):
     today = today or date.today()
     settings = get_settings(db)
     rates, rates_date = get_rates(db, settings.base_currency)
@@ -309,7 +361,8 @@ def forecast_from_db(db: Session, today: date | None = None):
     ]
     inflows = [
         Inflow(name=i.name, amount=Decimal(i.amount), currency=i.currency,
-               expected_date=i.expected_date, probability=i.probability, status=i.status)
+               expected_date=i.expected_date, probability=i.probability, status=i.status,
+               recurrence=i.recurrence or "once", recurrence_end=i.recurrence_end)
         for i in db.scalars(select(InflowRow)).all()
     ]
 
@@ -321,7 +374,7 @@ def forecast_from_db(db: Session, today: date | None = None):
 
     result = build_forecast(
         today=today,
-        horizon_days=settings.horizon_days,
+        horizon_days=horizon_days if horizon_days is not None else settings.horizon_days,
         rates=rates,
         snapshots=snapshots,
         obligations=obligations,

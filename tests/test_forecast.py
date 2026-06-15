@@ -252,3 +252,37 @@ def test_whatif_folding_wishes_as_obligations_lowers_minimum():
     assert whatif.scenarios["base"].min_total < baseline.scenarios["base"].min_total
     # минимум падает ровно на сумму хотелок в горизонте (20000 − 5000 − 3000)
     assert whatif.scenarios["base"].min_total == D("12000")
+
+
+# ---------- регулярные ожидаемые поступления (v2: разовые vs регулярные) ----------
+
+def test_recurring_expected_inflow_expands_over_horizon():
+    """Регулярное ожидаемое поступление разворачивается по горизонту (как обязательства)."""
+    today = date(2026, 1, 1)
+    snaps = [usd_snap(today, "1000")]
+    inflows = [Inflow(name="зарплата", amount=D("100"), currency="USD",
+                      expected_date=today, probability="confirmed", recurrence="monthly")]
+    r = fc(today=today, horizon_days=90, rates={"USD": D("1")}, snapshots=snaps, inflows=inflows)
+    # Jan1, Feb1, Mar1, Apr1 — 4 наступления в окне 90 дней
+    assert r.scenarios["pessimistic"].points[-1][1] == D("1400")
+
+
+def test_recurring_expected_inflow_respects_end_date():
+    today = date(2026, 1, 1)
+    snaps = [usd_snap(today, "1000")]
+    inflows = [Inflow(name="зарплата", amount=D("100"), currency="USD",
+                      expected_date=today, probability="confirmed", recurrence="monthly",
+                      recurrence_end=date(2026, 2, 15))]
+    r = fc(today=today, horizon_days=90, rates={"USD": D("1")}, snapshots=snaps, inflows=inflows)
+    # только Jan1 и Feb1 (Mar1 за пределами recurrence_end)
+    assert r.scenarios["pessimistic"].points[-1][1] == D("1200")
+
+
+def test_once_expected_inflow_counts_single_occurrence():
+    """Разовое поступление (recurrence='once') считается ровно один раз — регресс-гард."""
+    today = date(2026, 1, 1)
+    snaps = [usd_snap(today, "1000")]
+    inflows = [Inflow(name="инвойс", amount=D("100"), currency="USD",
+                      expected_date=today, probability="confirmed", recurrence="once")]
+    r = fc(today=today, horizon_days=90, rates={"USD": D("1")}, snapshots=snaps, inflows=inflows)
+    assert r.scenarios["pessimistic"].points[-1][1] == D("1100")

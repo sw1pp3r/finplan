@@ -46,6 +46,33 @@ def test_demo_received_income_does_not_distort_burn():
         assert 0 < s["burn_weekly"] < 2000  # ≈ $700/нед, не подскочил из-за доходов
 
 
+def test_demo_persona_artem_balance_in_range():
+    # персона Артёма (AI Builder): баланс ≈ $18 400 в базовой валюте USD
+    with make_client() as c:
+        s = c.get("/api/summary", headers={"X-Demo": "1"}).json()
+        assert s["base_currency"] == "USD"
+        assert 15000 < s["t0"] < 22000
+
+
+def test_demo_forecast_saws_and_cautious_goes_negative():
+    # прогноз должен «пилить», а осторожный сценарий — нырять в минус
+    with make_client() as c:
+        h = {"X-Demo": "1"}
+        s = c.get("/api/summary", headers=h).json()
+        pess = s["scenarios"]["pessimistic"]["min_total"]
+        base = s["scenarios"]["base"]["min_total"]
+        opt = s["scenarios"]["optimistic"]["min_total"]
+        assert pess < 0, "осторожный сценарий должен уходить в минус"
+        assert base > pess, "базовый здоровее осторожного"
+        assert opt >= base, "оптимистичный — не хуже базового"
+
+        # «пилит»: в базовой кривой есть подъёмы (поступления) между спадами (burn)
+        fc = c.get("/api/forecast", headers=h).json()
+        pts = [p[1] for p in fc["scenarios"]["base"]]
+        rises = sum(1 for a, b in zip(pts, pts[1:]) if b > a)
+        assert rises > 0, "базовая кривая должна расти на днях поступлений"
+
+
 def test_demo_writes_do_not_touch_real_db():
     with make_client() as c:
         r = c.post("/api/accounts", json={"name": "ДемоСчёт", "currency": "USD"},

@@ -7,6 +7,7 @@
 import hashlib
 import ipaddress
 import logging
+import socket
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
@@ -89,8 +90,17 @@ def save_wish_image(directory: str, wish_id: int, data: bytes) -> str:
     return name
 
 
-def is_safe_remote_url(url: str) -> bool:
-    """Грубая защита от SSRF: только http(s) и не приватный/локальный хост."""
+def _ip_blocked(ip) -> bool:
+    return (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+            or ip.is_multicast or ip.is_unspecified)
+
+
+def is_safe_remote_url(url: str, *, resolve=socket.getaddrinfo) -> bool:
+    """Защита от SSRF: только http(s), и КАЖДЫЙ адрес, в который резолвится хост,
+    должен быть публичным. Раньше проверялся лишь текстовый host как литеральный IP —
+    числовые формы (2130706433 / 0x7f000001 / 127.1) и internal-DNS-имена
+    (metadata.google.internal) обходили гард, хотя ОС резолвит их в loopback/метадату
+    (#26/#27). Теперь резолвим сами и валидируем результат; не резолвится → не рискуем."""
     try:
         u = urlparse(url)
     except Exception:  # noqa: BLE001
@@ -100,10 +110,37 @@ def is_safe_remote_url(url: str) -> bool:
     host = (u.hostname or "").lower()
     if not host or host == "localhost":
         return False
+    # литеральный IP (dotted/colon) — проверяем напрямую
     try:
-        ip = ipaddress.ip_address(host)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            return False
+        return not _ip_blocked(ipaddress.ip_address(host))
     except ValueError:
-        pass  # это hostname, не IP — допускаем (внешние хосты картинок)
+        pass  # не литеральный IP — резолвим имя/числовую форму через ОС
+    try:
+        infos = resolve(host, None)
+    except Exception:  # noqa: BLE001 — не резолвится: internal-only имя или офлайн → блок
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        addr = info[4][0].split("%")[0]  # отрезаем zone-id у link-local IPv6
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return False
+        if _ip_blocked(ip):
+            return False
     return True
+
+
+def is_real_image(data: bytes) -> bool:
+    """True, только если байты декодируются как растровая картинка (Pillow.verify).
+    Защищает от content-confusion: не-картинку (HTML/SVG/exec) не сохраняем и не отдаём (#28/#29)."""
+    if not data:
+        return False
+    try:
+        from PIL import Image
+        with Image.open(BytesIO(data)) as img:
+            img.verify()
+        return True
+    except Exception:  # noqa: BLE001
+        return False

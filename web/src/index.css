@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./shadcn-tailwind.css";
+@import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/playfair-display";
 
@@ -51,6 +51,21 @@ input[type="number"] {
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+    /* деньги-семантика + тёплые вспомогательные тона (см. designs/*) */
+    --color-pos: var(--green);
+    --color-pos-soft: var(--green-soft);
+    --color-warn: var(--amber);
+    --color-warn-soft: var(--amber-soft);
+    --color-neg: var(--red);
+    --color-neg-soft: var(--red-soft);
+    --color-accent-soft: var(--accent-soft);
+    --color-bg-soft: var(--bg-soft);
+    --color-card-2: var(--card-2);
+    --color-line-2: var(--line-2);
+    --color-ink-2: var(--ink-2);
+    --color-ink-3: var(--ink-3);
+    --color-chart-grid: var(--chart-grid);
+    --color-chart-axis: var(--chart-axis);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -60,73 +75,114 @@ input[type="number"] {
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ===== Тёплые дизайн-токены (источник: designs/finplan Dashboard.html :root) =====
+   shadcn-переменные маппятся на тёплую палитру; рядом — raw-токены деньги-семантики
+   (--green/--amber/--red и -soft, --ink-2/3, --bg-soft, --card-2, --chart-*) для
+   прямого var() в графике и кастомных местах. */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --background: #F3F1EC;
+    --foreground: #171511;
+    --card: #FFFFFF;
+    --card-foreground: #171511;
+    --popover: #FFFFFF;
+    --popover-foreground: #171511;
+    --primary: #BC6443;
+    --primary-foreground: #FFFFFF;
+    --secondary: #EEEBE4;
+    --secondary-foreground: #171511;
+    --muted: #EEEBE4;
+    --muted-foreground: #847C6F;
+    --accent: #EEEBE4;
+    --accent-foreground: #171511;
+    --destructive: #B23A2E;
+    --border: #E6E2D9;
+    --input: #E6E2D9;
+    --ring: #BC6443;
+    --chart-1: #171511;
+    --chart-2: #2E8456;
+    --chart-3: #B23A2E;
+    --chart-4: #AE7E26;
+    --chart-5: #BC6443;
+    --radius: 0.6875rem;
+    --sidebar: #EEEBE4;
+    --sidebar-foreground: #171511;
+    --sidebar-primary: #BC6443;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #F5F3EE;
+    --sidebar-accent-foreground: #171511;
+    --sidebar-border: #E6E2D9;
+    --sidebar-ring: #BC6443;
+
+    /* raw деньги-семантика и тёплые тона */
+    --bg-soft: #EEEBE4;
+    --card-2: #F5F3EE;
+    --ink-2: #544F46;
+    --ink-3: #928B7E;
+    --line-2: #EEEAE2;
+    --accent-2: #A4502F;
+    --accent-soft: #F6E7DD;
+    --green: #2E8456;
+    --green-soft: #E1EFE6;
+    --amber: #AE7E26;
+    --amber-soft: #F4ECD6;
+    --red: #B23A2E;
+    --red-soft: #F1DED9;
+    --chart-grid: #EBE7DE;
+    --chart-axis: #A69F90;
+    --shadow: 0 1px 1px rgba(40,30,15,.04), 0 4px 16px -10px rgba(40,30,15,.10);
+    --shadow-sm: 0 1px 1px rgba(40,30,15,.05);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: #151310;
+    --foreground: #F1EEE6;
+    --card: #201E19;
+    --card-foreground: #F1EEE6;
+    --popover: #201E19;
+    --popover-foreground: #F1EEE6;
+    --primary: #D98B66;
+    --primary-foreground: #201E19;
+    --secondary: #27241F;
+    --secondary-foreground: #F1EEE6;
+    --muted: #27241F;
+    --muted-foreground: #ABA597;
+    --accent: #27241F;
+    --accent-foreground: #F1EEE6;
+    --destructive: #CF6E60;
+    --border: #322E27;
+    --input: #322E27;
+    --ring: #D98B66;
+    --chart-1: #F1EEE6;
+    --chart-2: #5DB17C;
+    --chart-3: #CF6E60;
+    --chart-4: #CE9F52;
+    --chart-5: #D98B66;
+    --sidebar: #1A1814;
+    --sidebar-foreground: #F1EEE6;
+    --sidebar-primary: #D98B66;
+    --sidebar-primary-foreground: #201E19;
+    --sidebar-accent: #27241F;
+    --sidebar-accent-foreground: #F1EEE6;
+    --sidebar-border: #322E27;
+    --sidebar-ring: #D98B66;
+
+    --bg-soft: #1A1814;
+    --card-2: #27241F;
+    --ink-2: #ABA597;
+    --ink-3: #797264;
+    --line-2: #28251F;
+    --accent-2: #E29C7B;
+    --accent-soft: #33231A;
+    --green: #5DB17C;
+    --green-soft: #1B2C21;
+    --amber: #CE9F52;
+    --amber-soft: #30270F;
+    --red: #CF6E60;
+    --red-soft: #331E19;
+    --chart-grid: #2A2720;
+    --chart-axis: #6B6456;
+    --shadow: 0 1px 1px rgba(0,0,0,.34), 0 8px 22px -14px rgba(0,0,0,.6);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
 }
 
 @layer base {
@@ -138,11 +194,17 @@ input[type="number"] {
     /* full-bleed Доски использует 100vw — режем горизонтальный овершут от ширины
        скроллбара (clip, не hidden — не создаёт scroll-container, sticky-хедер живёт) */
     overflow-x: clip;
+    font-feature-settings: "ss01", "cv01";
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
     }
   html {
     @apply font-sans;
     }
 }
+
+/* tabular-nums для всех денежных чисел (как в макетах) */
+.tnum { font-variant-numeric: tabular-nums; }
 
 /* ===================== Доска желаний — «карта мечты» =====================
    Идея: статус достижимости — это и есть зрелище. Близкие мечты (по карману)
@@ -240,4 +302,55 @@ input[type="number"] {
   .board-rise { animation: none; }
   .board-aura { animation: none; }
   .group:hover .wish-card { transform: none; }
+}
+
+/* ===================== Онбординг-коачмарк — мягкое движение =====================
+   Подсветка плавно «переезжает» между шагами (transition по позиции/размеру), а
+   карточка на каждом шаге мягко появляется снизу вверх (fade + rise). Анимируем
+   только дешёвые свойства; уважаем prefers-reduced-motion. */
+[data-coach-spotlight] {
+  transition:
+    top 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    left 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* карточка скрыта, пока тур не «прицелился» на текущий шаг */
+[data-coach-card] {
+  opacity: 0;
+  pointer-events: none;
+}
+[data-coach-card].coach-card-in {
+  pointer-events: auto;
+  animation: coach-card-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes coach-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* финал тура: конфетти сыпется сверху вниз + карточка «всё настроено» */
+.coach-confetti {
+  animation-name: coach-confetti;
+  animation-timing-function: cubic-bezier(0.2, 0.6, 0.5, 1);
+  animation-fill-mode: both;
+  will-change: transform;
+}
+@keyframes coach-confetti {
+  0%   { transform: translate(0, -12vh) rotate(0deg); opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translate(var(--drift, 0), 112vh) rotate(var(--rot, 540deg)); opacity: 0.9; }
+}
+@keyframes coach-celebrate-pop {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+.coach-celebrate-card { animation: coach-celebrate-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-coach-spotlight] { transition: none; }
+  [data-coach-card].coach-card-in { animation: none; opacity: 1; }
+  .coach-confetti { display: none; }
+  .coach-celebrate-card { animation: none; }
 }

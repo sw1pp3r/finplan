@@ -1,11 +1,14 @@
 """FastAPI app factory: REST API + раздача собранной SPA (web/dist)."""
 import os
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import QueuePool
 
 from .api import router as api_router
 from .db import init_db, make_engine
@@ -37,7 +40,17 @@ def create_app(
 
     # Демо-режим: отдельная in-memory БД с фейк-данными для показа на расшаренном экране.
     # Роутится по заголовку X-Demo (см. get_db); реальная БД при этом не задействована.
-    demo_engine = make_engine("sqlite://")
+    # Shared-cache + пул отдельных коннектов (а не один StaticPool-коннект): общий коннект
+    # ронял sqlite-курсор при конкурентных запросах демо — дашборд шлёт ~8 разом → плавающие
+    # 500 (IndexError: tuple index out of range / UNIQUE settings.id). Уникальное имя на инстанс
+    # изолирует БД; keepalive-коннект держит shared in-memory живой на весь процесс.
+    demo_name = f"finplan_demo_{uuid.uuid4().hex}"
+    demo_engine = create_engine(
+        f"sqlite:///file:{demo_name}?mode=memory&cache=shared&uri=true",
+        connect_args={"check_same_thread": False},
+        poolclass=QueuePool,
+    )
+    app.state._demo_keepalive = demo_engine.connect()
     init_db(demo_engine, seed=True)
     with sessionmaker(bind=demo_engine)() as demo_db:
         seed_demo_data(demo_db)
@@ -59,7 +72,10 @@ def create_app(
             file = (dist_root / path).resolve()
             if path and file.is_file() and file.is_relative_to(dist_root):
                 return FileResponse(file)
-            return FileResponse(dist_root / "index.html")
+            # index.html — всегда ревалидировать: иначе браузер по эвристике отдаёт
+            # закешированный shell со ссылкой на старый хешированный бандл, который после
+            # редеплоя удалён → белый экран. Кнопка «Демо» (location.reload) это вскрывает.
+            return FileResponse(dist_root / "index.html", headers={"Cache-Control": "no-cache"})
 
     if fx_autofetch:
         from .fx import start_fx_scheduler

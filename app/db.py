@@ -52,6 +52,8 @@ class InflowRow(Base):
     expected_date: Mapped[date] = mapped_column(Date)
     probability: Mapped[str] = mapped_column(String(10), default="confirmed")  # confirmed | likely | possible
     status: Mapped[str] = mapped_column(String(10), default="expected")  # expected | received | lost
+    recurrence: Mapped[str] = mapped_column(String(10), default="once")  # once | weekly | monthly | yearly
+    recurrence_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     counterparty: Mapped[str | None] = mapped_column(String(120), nullable=True)  # от кого
     direction: Mapped[str | None] = mapped_column(String(80), nullable=True)  # направление (Фриланс, обучение…)
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
@@ -80,6 +82,7 @@ class Wish(Base):
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     image_source: Mapped[str | None] = mapped_column(String(40), nullable=True)  # manual | upload | codex
     card_size: Mapped[str | None] = mapped_column(String(12), nullable=True)  # формат плитки на Доске: small|square|tall|wide|large (null/auto → по приоритету)
+    sort_order: Mapped[int] = mapped_column(default=0)  # ручной порядок на Доске (меньше = раньше)
 
 
 class Direction(Base):
@@ -103,6 +106,7 @@ class SettingsRow(Base):
     cushion: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
     horizon_days: Mapped[int] = mapped_column(default=180)
     manual_burn_weekly: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)  # имя пользователя (профиль)
 
 
 class CourseTariff(Base):
@@ -162,9 +166,11 @@ def _ensure_columns(engine):
     from sqlalchemy import inspect, text
 
     add_columns = {
-        "inflows": {"counterparty": "VARCHAR(120)", "direction": "VARCHAR(80)"},
+        "inflows": {"counterparty": "VARCHAR(120)", "direction": "VARCHAR(80)",
+                    "recurrence": "VARCHAR(10) DEFAULT 'once' NOT NULL", "recurrence_end": "DATE"},
         "obligations": {"category": "VARCHAR(80)"},
-        "wishes": {"image_url": "VARCHAR(500)", "image_source": "VARCHAR(40)", "card_size": "VARCHAR(12)"},
+        "wishes": {"image_url": "VARCHAR(500)", "image_source": "VARCHAR(40)", "card_size": "VARCHAR(12)", "sort_order": "INTEGER DEFAULT 0"},
+        "settings": {"display_name": "VARCHAR(120)"},
     }
     insp = inspect(engine)
     is_pg = engine.dialect.name == "postgresql"
@@ -174,8 +180,16 @@ def _ensure_columns(engine):
             for col, ddl in columns.items():
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
-        # SQLite не enforce-ит длину varchar и не умеет ALTER TYPE — расширяем только PG
+        # Паритет fresh↔migrated схемы для NOT NULL-колонок модели (#21): добиваем дефолтами
+        # уже просочившиеся NULL и на Postgres доводим колонку до NOT NULL, как в модели.
+        # На SQLite sort_order остаётся nullable (ALTER не поддержан) — её страхует
+        # coalesce в wishes_summary (#20).
+        conn.execute(text("UPDATE wishes SET sort_order = 0 WHERE sort_order IS NULL"))
+        conn.execute(text("UPDATE inflows SET recurrence = 'once' WHERE recurrence IS NULL"))
         if is_pg:
+            conn.execute(text("ALTER TABLE wishes ALTER COLUMN sort_order SET NOT NULL"))
+            conn.execute(text("ALTER TABLE inflows ALTER COLUMN recurrence SET NOT NULL"))
+            # SQLite не enforce-ит длину varchar и не умеет ALTER TYPE — расширяем только PG
             for table, col in _CURRENCY_COLUMNS.items():
                 conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {col} TYPE VARCHAR(12)"))
 

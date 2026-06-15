@@ -32,6 +32,8 @@ class Inflow:
     expected_date: date
     probability: str = "confirmed"  # confirmed | likely | possible
     status: str = "expected"  # expected | received | lost
+    recurrence: str = "once"  # once | weekly | monthly | yearly
+    recurrence_end: date | None = None
 
 
 @dataclass
@@ -83,7 +85,8 @@ def next_period(d: date, recurrence: str) -> date:
 
 
 def _to_base(amount: Decimal, currency: str, rates: dict) -> Decimal:
-    return amount * rates[currency]
+    # валюта без курса = 0 (документированный контракт), движок не роняем KeyError (#5)
+    return amount * rates.get(currency, Decimal("0"))
 
 
 def _median(values: list) -> Decimal:
@@ -95,8 +98,31 @@ def _median(values: list) -> Decimal:
     return (s[mid - 1] + s[mid]) / 2
 
 
+def _scheduled_count(ob, d1: date, d2: date) -> int:
+    """Сколько раз обязательство наступает строго в окне (d1, d2] (без клэмпа на сегодня)."""
+    occ = ob.due_date
+    if ob.recurrence == "once":
+        return 1 if d1 < occ <= d2 else 0
+    month_step = {"monthly": 1, "yearly": 12}.get(ob.recurrence)
+    n, cnt = 0, 0
+    while occ <= d2:
+        if ob.recurrence_end is not None and occ > ob.recurrence_end:
+            break
+        if d1 < occ:
+            cnt += 1
+        n += 1
+        if ob.recurrence == "weekly":
+            occ = ob.due_date + timedelta(days=7 * n)
+        else:
+            occ = _add_months(ob.due_date, month_step * n)
+    return cnt
+
+
 def _derive_burn(snap_totals: dict, obligations: list, inflows: list, rates: dict) -> Decimal:
-    """Медиана недельных дельт между соседними снимками с поправкой на one-off факты."""
+    """Медиана недельных дельт между соседними снимками с поправкой на one-off факты.
+    Из дельты вычитаются НЕ только оплаченные one-off (paid), но и запланированные
+    обязательства, наступившие в окне снимков — иначе их трата сидит и в derived burn,
+    и ещё раз на кривой/в breakeven (двойной счёт #2/#3/#7). Поправка симметрична paid."""
     dates = sorted(snap_totals)
     pairs = []
     for d1, d2 in zip(dates, dates[1:]):
@@ -105,34 +131,64 @@ def _derive_burn(snap_totals: dict, obligations: list, inflows: list, rates: dic
              if o.status == "paid" and d1 < o.due_date <= d2),
             Decimal("0"),
         )
+        planned = sum(
+            (_to_base(o.amount, o.currency, rates) * _scheduled_count(o, d1, d2)
+             for o in obligations if o.status == "planned"),
+            Decimal("0"),
+        )
         received = sum(
             (_to_base(i.amount, i.currency, rates) for i in inflows
              if i.status == "received" and d1 < i.expected_date <= d2),
             Decimal("0"),
         )
         days = (d2 - d1).days
-        burn = (snap_totals[d1] - snap_totals[d2] - paid + received) * 7 / days
+        burn = (snap_totals[d1] - snap_totals[d2] - paid - planned + received) * 7 / days
         pairs.append(burn)
     return _median(pairs)
+
+
+def _occurrences(start: date, recurrence: str, recurrence_end: date | None,
+                 today: date, horizon_end: date):
+    """Развёртка recurrence от start в окне [today, horizon_end].
+    Для once просрочка клэмпится на сегодня. Для регулярных серий полностью
+    просроченные периоды НЕ складываются стопкой на сегодня (#4): только текущий
+    (последний наступивший ≤ today) период клэмпится на сегодня один раз, более
+    ранние отбрасываются. Будущие наступления остаются на своих датах.
+    Общая логика для обязательств и регулярных поступлений."""
+    if recurrence == "once":
+        if start <= horizon_end and (recurrence_end is None or start <= recurrence_end):
+            yield max(start, today)
+        return
+    month_step = {"monthly": 1, "yearly": 12}.get(recurrence)
+    occ, n = start, 0
+    overdue_pending = False  # был хотя бы один период строго до сегодня
+    emitted_today = False
+    while occ <= horizon_end:
+        if recurrence_end is not None and occ > recurrence_end:
+            break
+        if occ < today:
+            overdue_pending = True  # помним только сам факт; не выдаём каждый
+        else:
+            if overdue_pending and not emitted_today and occ > today:
+                yield today  # текущий просроченный период → сегодня (единожды)
+                emitted_today = True
+            yield occ
+            if occ == today:
+                emitted_today = True
+        n += 1
+        if recurrence == "weekly":
+            occ = start + timedelta(days=7 * n)
+        else:
+            occ = _add_months(start, month_step * n)
+    if overdue_pending and not emitted_today:
+        yield today  # вся серия просрочена в пределах окна → один платёж сегодня
 
 
 def _obligation_occurrences(ob: Obligation, today: date, horizon_end: date):
     """Развёртка recurrence; просроченные planned ложатся на сегодня."""
     if ob.status != "planned":
         return
-    month_step = {"monthly": 1, "yearly": 12}.get(ob.recurrence)  # None для once/weekly
-    occ, n = ob.due_date, 0
-    while occ <= horizon_end:
-        if ob.recurrence_end is not None and occ > ob.recurrence_end:
-            break
-        yield max(occ, today)
-        if ob.recurrence == "once":
-            break
-        n += 1
-        if ob.recurrence == "weekly":
-            occ = ob.due_date + timedelta(days=7 * n)
-        else:
-            occ = _add_months(ob.due_date, month_step * n)
+    yield from _occurrences(ob.due_date, ob.recurrence, ob.recurrence_end, today, horizon_end)
 
 
 def build_forecast(
@@ -188,10 +244,9 @@ def build_forecast(
             w = weights[inf.probability]
             if w == 0:
                 continue
-            d = max(inf.expected_date, today)
-            if d > horizon_end:
-                continue
-            events[d] = events.get(d, Decimal("0")) + _to_base(inf.amount, inf.currency, rates) * w
+            amt = _to_base(inf.amount, inf.currency, rates) * w
+            for occ in _occurrences(inf.expected_date, inf.recurrence, inf.recurrence_end, today, horizon_end):
+                events[occ] = events.get(occ, Decimal("0")) + amt
 
         points = []
         cum = Decimal("0")
@@ -217,9 +272,10 @@ def build_forecast(
             w = weights[inf.probability]
             if w == 0:
                 continue
-            d = max(inf.expected_date, today)
-            if d <= min_date and d <= horizon_end:
-                inf_to_min += _to_base(inf.amount, inf.currency, rates) * w
+            amt = _to_base(inf.amount, inf.currency, rates) * w
+            for occ in _occurrences(inf.expected_date, inf.recurrence, inf.recurrence_end, today, horizon_end):
+                if occ <= min_date:
+                    inf_to_min += amt
 
         scenarios[name] = ScenarioResult(
             points=points, min_total=min_total, min_date=min_date, cushion_breach_date=breach,

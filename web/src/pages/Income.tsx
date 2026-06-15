@@ -1,115 +1,431 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, type Income as IncomeData, type Inflow, type Ref } from "@/lib/api"
+import { regularMonthlyIncome } from "@/lib/aggregates"
 import { refreshCurrencies } from "@/lib/currencies"
+import { useConverter } from "@/lib/fx"
 import { ddmm, money, monthLabel, todayIso } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { BaseAside } from "@/components/BaseAside"
 import { CurrencySelect } from "@/components/CurrencySelect"
 import { RefCombo } from "@/components/RefCombo"
+import { SectionHelp } from "@/components/SectionHelp"
+import { InfoHint } from "@/components/InfoHint"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table"
 
-const INF_STATUS = { expected: "ожидается", received: "получено", lost: "потеряно" }
+// ───────────────────────────── constants / helpers ─────────────────────────
+
+const REC_LABEL: Record<string, string> = {
+  once: "Разовый", weekly: "Еженедельно", monthly: "Ежемесячно", yearly: "Ежегодно",
+}
+const REC_SHORT: Record<string, string> = {
+  once: "разовый", weekly: "еженедельно", monthly: "ежемесячно", yearly: "ежегодно",
+}
 
 // цвет = уверенность, pct = вес в базовом сценарии
 const PROB_STYLE = {
-  confirmed: { label: "точно", pct: "100%", text: "text-emerald-600", bar: "bg-emerald-600/80" },
-  likely: { label: "скорее всего", pct: "70%", text: "text-amber-600", bar: "bg-amber-500/80" },
-  possible: { label: "под вопросом", pct: "30%", text: "text-slate-500", bar: "bg-slate-400/80" },
+  confirmed: { label: "точно", pct: "100%", text: "text-pos", bar: "bg-pos/70" },
+  likely: { label: "скорее всего", pct: "70%", text: "text-warn", bar: "bg-warn/70" },
+  possible: { label: "под вопросом", pct: "30%", text: "text-ink-3", bar: "bg-ink-3/60" },
 } as const
 const PROB_LABEL = {
   confirmed: PROB_STYLE.confirmed.label, likely: PROB_STYLE.likely.label, possible: PROB_STYLE.possible.label,
 }
 
-function GhostBtn(props: React.ComponentProps<typeof Button>) {
-  return <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" {...props} />
+const isRegular = (rec: string) => rec !== "once"
+const initials = (s: string) => (s.trim()[0] || "•").toUpperCase()
+
+// общая колоночная сетка для read-строк И inline-форм — ничего не «прыгает» при правке
+const GRID =
+  "grid items-center gap-x-3.5 " +
+  "grid-cols-[40px_minmax(0,1fr)_158px] " +
+  "lg:grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px]"
+
+// ───────────────────────────── icons ───────────────────────────────────────
+
+function IcRepeat({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M17 2l3 3-3 3" /><path d="M3 11V9a4 4 0 0 1 4-4h13" />
+      <path d="M7 22l-3-3 3-3" /><path d="M21 13v2a4 4 0 0 1-4 4H4" />
+    </svg>
+  )
+}
+function IcEdit({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13.5 6.5l4 4" />
+    </svg>
+  )
+}
+function IcCheck({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1"
+      strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M5 12l5 5L20 6" />
+    </svg>
+  )
+}
+function IcTrash({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+    </svg>
+  )
+}
+function IcPlus({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+      strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
 }
 
-function ExpectedPipeline({ data, cur }: { data: IncomeData["expected"]; cur: string }) {
-  const probMax = Math.max(1, ...Object.values(data.by_probability ?? {}))
-  const monthMax = Math.max(1, ...Object.values(data.by_month ?? {}))
-  const months = Object.entries(data.by_month ?? {}).sort(([a], [b]) => a.localeCompare(b))
+// ───────────────────────────── small UI bits ───────────────────────────────
+
+function StatusChip({ status }: { status: Inflow["status"] }) {
+  if (status === "received") {
+    return (
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-pos-soft px-2.5 py-1 text-[11.5px] font-semibold text-pos">
+        <i className="h-1.5 w-1.5 rounded-full bg-pos" />Получено
+      </span>
+    )
+  }
+  if (status === "lost") {
+    return (
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-neg-soft px-2.5 py-1 text-[11.5px] font-semibold text-neg">
+        <i className="h-1.5 w-1.5 rounded-full bg-neg" />Потеряно
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warn-soft px-2.5 py-1 text-[11.5px] font-semibold text-warn">
+      <i className="h-1.5 w-1.5 rounded-full bg-warn" />Ожидается
+    </span>
+  )
+}
+
+function GroupLabel({ text, n }: { text: string; n: number }) {
+  return (
+    <div className="flex items-center gap-2 px-4 pb-1.5 pt-3.5 text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">
+      {text}
+      <span className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full border border-border bg-card-2 px-1.5 text-[11px] font-semibold normal-case tracking-normal text-ink-2">
+        {n}
+      </span>
+    </div>
+  )
+}
+
+// ───────────────────────────── pipeline header block ───────────────────────
+
+function PipelineTop({ data, expectedRows, cur, regularMonthly }: {
+  data: IncomeData
+  expectedRows: Inflow[]
+  cur: string
+  regularMonthly: number
+}) {
+  const exp = data.expected
+  const probMax = Math.max(1, ...Object.values(exp.by_probability ?? {}))
+  const receivedThisMonth = useMemo(() => {
+    const ym = todayIso().slice(0, 7)
+    return data.by_month?.[ym] ?? 0
+  }, [data.by_month])
+  const monthName = monthLabel(todayIso().slice(0, 7)).split(" ")[0]
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium">Ожидается</CardTitle>
-        <p className="text-xs text-muted-foreground">пайплайн будущих поступлений</p>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-x-10 gap-y-4 lg:grid-cols-2">
-          <div className="flex flex-col gap-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">По вероятности</div>
-            {(["confirmed", "likely", "possible"] as const).map((p) => {
-              const v = data.by_probability[p]
-              const st = PROB_STYLE[p]
-              return (
-                <div key={p}>
-                  <div className="mb-1 flex items-baseline justify-between text-sm">
-                    <span className="font-medium">{st.label} <span className="text-xs font-normal text-muted-foreground">{st.pct}</span></span>
-                    <span className={`tabular-nums ${st.text}`}>+{money(v)} {cur}</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                    <div className={`h-full rounded-full ${st.bar}`} style={{ width: `${(v / probMax) * 100}%` }} />
-                  </div>
-                </div>
-              )
-            })}
-            <Separator />
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-semibold">Всего ожидается</span>
-              <span className="font-semibold tabular-nums">{money(data.total)} {cur}</span>
-            </div>
-            <div className="flex items-baseline justify-between text-xs text-muted-foreground">
-              <span>Реалистично (взвешенно 1 / 0.7 / 0.3)</span>
-              <span className="tabular-nums">{money(data.weighted)} {cur}</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">По месяцам</div>
-            {months.length ? months.map(([m, v]) => (
-              <div key={m}>
-                <div className="mb-1 flex items-baseline justify-between text-sm">
-                  <span className="font-medium">{monthLabel(m)}</span>
-                  <span className="tabular-nums">+{money(v)} {cur}</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                  <div className="h-full rounded-full bg-foreground/30" style={{ width: `${(v / monthMax) * 100}%` }} />
-                </div>
-              </div>
-            )) : <p className="text-sm text-muted-foreground">—</p>}
-          </div>
+    <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      {/* pipeline */}
+      <div className="relative overflow-hidden rounded-lg border border-border bg-card px-6 py-5 shadow-sm">
+        <span className="absolute inset-y-[18px] left-0 w-[3px] rounded bg-warn" />
+        <div className="mb-1 flex items-center gap-2.5">
+          <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+            Ожидается дальше
+          </span>
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warn-soft px-2.5 py-1 text-[11.5px] font-semibold text-warn">
+            <i className="h-1.5 w-1.5 rounded-full bg-warn" />{expectedRows.length} в очереди
+          </span>
         </div>
-      </CardContent>
-    </Card>
+        <div className="mt-1.5 text-[38px] font-semibold leading-[1.05] tracking-[-0.035em] tnum">
+          {money(exp.weighted)} {cur}
+        </div>
+        <div className="mt-1.5 flex items-center gap-1.5 text-[13.5px] text-ink-2">
+          <span><b className="font-semibold text-foreground">Реалистичная сумма</b> — она и питает кривую прогноза. Если сбудется всё на 100%: <b className="font-semibold text-foreground tnum">{money(exp.total)} {cur}</b>.</span>
+          <InfoHint>Точные берём целиком, «скорее всего» — на 70%, «под вопросом» — на 30%. Реалистичная сумма и попадает в прогноз.</InfoHint>
+        </div>
+        <div className="mt-4 flex flex-col gap-3">
+          {(["confirmed", "likely", "possible"] as const).map((p) => {
+            const v = exp.by_probability[p]
+            const st = PROB_STYLE[p]
+            return (
+              <div key={p} className="grid grid-cols-[1fr_auto] items-center gap-x-2.5 gap-y-2">
+                <span className="text-[13px] text-ink-2">
+                  {st.label} <span className="text-ink-3">{st.pct}</span>
+                </span>
+                <span className={cn("text-[13.5px] font-semibold tnum", st.text)}>+{money(v)} {cur}</span>
+                <span className="col-span-2 h-1.5 overflow-hidden rounded bg-card-2">
+                  <span className={cn("block h-full rounded", st.bar)} style={{ width: `${(v / probMax) * 100}%` }} />
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* context cards */}
+      <div className="flex flex-col gap-4 max-[980px]:flex-row">
+        <div className="flex flex-1 flex-col justify-center rounded-lg border border-border bg-card px-5 py-4 shadow-sm">
+          <span className="text-[12.5px] font-medium text-ink-2">Получено в {monthName.toLowerCase()}</span>
+          <span className="mt-1 text-[25px] font-semibold leading-none tracking-[-0.025em] text-pos tnum">
+            {money(receivedThisMonth)} {cur}
+          </span>
+          <span className="mt-1.5 text-[12px] text-ink-3">уже на счетах · в снимке «сегодня»</span>
+        </div>
+        <div className="flex flex-1 flex-col justify-center rounded-lg border border-border bg-card px-5 py-4 shadow-sm">
+          <span className="text-[12.5px] font-medium text-ink-2">Регулярный доход</span>
+          <span className="mt-1 text-[25px] font-semibold leading-none tracking-[-0.025em] tnum">
+            {money(regularMonthly)} {cur}
+            <span className="text-[15px] font-medium text-ink-3"> / мес</span>
+          </span>
+          <span className="mt-1.5 text-[12px] text-ink-3">повторяющиеся источники · без разовых</span>
+        </div>
+      </div>
+    </section>
   )
+}
+
+// ───────────────────────────── read row ────────────────────────────────────
+
+function ReadRow({ i, base, conv, onEdit, onMark, onLost, onReturn, onDelete }: {
+  i: Inflow
+  base: string
+  conv: (amount: number, currency: string) => number | null
+  onEdit: () => void
+  onMark: () => void
+  onLost: () => void
+  onReturn: () => void
+  onDelete: () => void
+}) {
+  const regular = isRegular(i.recurrence)
+  const name = i.counterparty || i.name
+  const lost = i.status === "lost"
+
+  return (
+    <div className={cn(
+      "group relative mx-1 rounded-[10px] px-4 py-3 transition-colors hover:bg-card-2",
+      "[&+&]:shadow-[inset_0_1px_0_var(--line-2)]",
+      lost && "opacity-50",
+      GRID,
+    )}>
+      <span className={cn(
+        "grid h-10 w-10 place-items-center rounded-[10px] border text-[15px] font-semibold",
+        regular ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2",
+      )}>
+        {initials(name)}
+      </span>
+
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-[14.5px] font-medium tracking-[-0.01em]">
+          <span className="truncate">{name}</span>
+          {regular ? (
+            <span className="inline-flex flex-none items-center gap-1 rounded-md bg-accent-soft py-0.5 pl-1.5 pr-1.5 text-[11px] font-semibold text-primary">
+              <IcRepeat className="h-3 w-3" />{REC_SHORT[i.recurrence]}
+            </span>
+          ) : i.status === "expected" ? (
+            <span className="flex-none rounded-md border border-border bg-card-2 px-2 py-0.5 text-[11px] font-semibold text-ink-3">
+              разовый
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-0.5 text-[12.5px] text-ink-3">{i.direction || i.note || "—"}</div>
+      </div>
+
+      <div className="text-right">
+        <span className={cn(
+          "block whitespace-nowrap text-[15.5px] font-semibold tnum",
+          i.status === "received" ? "text-pos" : "text-foreground",
+        )}>
+          +{money(i.amount)} {i.currency}
+        </span>
+        {i.currency !== base && <BaseAside cur={base} value={conv(i.amount, i.currency)} sign="+" />}
+      </div>
+
+      <span className="hidden whitespace-nowrap text-[13px] text-ink-2 lg:block">
+        {i.status === "expected" ? REC_LABEL[i.recurrence] : "—"}
+      </span>
+      <span className="hidden whitespace-nowrap text-[13px] text-ink-2 tnum lg:block">{ddmm(i.expected_date)}</span>
+      <span className="hidden min-w-0 lg:flex lg:items-center lg:gap-1.5">
+        <StatusChip status={i.status} />
+        {i.status === "expected" && (
+          <span className="text-[11px] text-ink-3">{PROB_LABEL[i.probability]}</span>
+        )}
+      </span>
+
+      {/* hover actions */}
+      <div className="pointer-events-none absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center gap-1 bg-gradient-to-r from-transparent via-card-2 to-card-2 pl-9 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+        <button onClick={onEdit} title="Редактировать"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+          <IcEdit className="h-[15px] w-[15px]" />
+        </button>
+        {i.status === "expected" ? (
+          <>
+            <button onClick={onMark}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos">
+              <IcCheck className="h-[14px] w-[14px]" />Получено
+            </button>
+            <button onClick={onLost} title="Не пришло"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+              ✕
+            </button>
+          </>
+        ) : (
+          <button onClick={onReturn}
+            className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+            Вернуть
+          </button>
+        )}
+        <button onClick={onDelete} title="Удалить"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg">
+          <IcTrash className="h-[15px] w-[15px]" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ───────────────────────────── inline form (add OR edit) ───────────────────
+// Те же колонки, что у read-строки (через GRID), плюс полнострочный футер.
+
+type FormState = {
+  source: string
+  amount: string
+  currency: string
+  recurrence: string
+  date: string
+  probability: string
+}
+
+function InlineForm({ kind, state, set, directions, onSubmit, onCancel, onDelete }: {
+  kind: "add" | "edit"
+  state: FormState
+  set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
+  directions: Ref[]
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+  onCancel: () => void
+  onDelete?: () => void
+}) {
+  const regular = isRegular(state.recurrence)
+  return (
+    <form onSubmit={onSubmit}
+      className={cn(
+        "relative mx-1 my-1.5 rounded-[10px] bg-card px-4 py-3",
+        "shadow-[0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]",
+        GRID,
+      )}>
+      {kind === "add" && (
+        <div className="col-span-full mb-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink-2">
+          <IcPlus className="h-[15px] w-[15px] text-primary" />Новый доход
+        </div>
+      )}
+
+      <span className={cn(
+        "grid h-10 w-10 place-items-center rounded-[10px] border text-[15px] font-semibold max-[980px]:hidden",
+        regular || kind === "add" ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2",
+      )}>
+        {kind === "add" ? <IcPlus className="h-[17px] w-[17px]" /> : initials(state.source || "•")}
+      </span>
+
+      {/* источник (RefCombo over directions/counterparties) */}
+      <RefCombo
+        options={directions}
+        value={state.source}
+        onChange={(v) => set("source", v)}
+        placeholder="Источник / направление"
+        width="w-full"
+      />
+
+      {/* сумма + валюта */}
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Input
+          inputMode="decimal"
+          value={state.amount}
+          onChange={(e) => set("amount", e.target.value)}
+          placeholder="0"
+          required
+          className="min-w-0 text-right font-medium tnum"
+        />
+        <CurrencySelect value={state.currency} onChange={(v) => set("currency", v)} className="w-[78px]" />
+      </div>
+
+      {/* повтор */}
+      <Select value={state.recurrence} onValueChange={(v) => set("recurrence", v)}>
+        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="once">Разовый</SelectItem>
+          <SelectItem value="weekly">Еженедельно</SelectItem>
+          <SelectItem value="monthly">Ежемесячно</SelectItem>
+          <SelectItem value="yearly">Ежегодно</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* дата */}
+      <Input type="date" value={state.date} onChange={(e) => set("date", e.target.value)} required className="w-full" />
+
+      {/* уверенность */}
+      <Select value={state.probability} onValueChange={(v) => set("probability", v)}>
+        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="confirmed">точно (100%)</SelectItem>
+          <SelectItem value="likely">скорее всего (70%)</SelectItem>
+          <SelectItem value="possible">под вопросом (30%)</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* footer */}
+      <div className="col-span-full mt-2 flex items-center gap-2.5 border-t border-line-2 pt-3">
+        <button type="button" onClick={onCancel}
+          className="rounded-lg px-3 py-1.5 text-[13.5px] font-medium text-ink-3 transition-colors hover:text-foreground">
+          Отмена
+        </button>
+        <div className="flex-1" />
+        {kind === "edit" && onDelete && (
+          <button type="button" onClick={onDelete}
+            className="rounded-lg border border-border bg-card px-3.5 py-1.5 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-neg hover:text-neg">
+            Удалить
+          </button>
+        )}
+        <button type="submit"
+          className="rounded-lg border border-primary bg-primary px-3.5 py-1.5 text-[13.5px] font-medium text-primary-foreground shadow-sm transition-[filter] hover:brightness-105">
+          {kind === "add" ? "Добавить доход" : "Сохранить"}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// ───────────────────────────── page ────────────────────────────────────────
+
+const EMPTY_FORM: FormState = {
+  source: "", amount: "", currency: "USD", recurrence: "once",
+  date: todayIso(), probability: "confirmed",
 }
 
 export default function Income() {
   const [data, setData] = useState<IncomeData | null>(null)
   const [inflows, setInflows] = useState<Inflow[]>([])
   const [directions, setDirections] = useState<Ref[]>([])
-  const [mode, setMode] = useState<"received" | "expected">("received")
-  const [currency, setCurrency] = useState("USD")
-  const [direction, setDirection] = useState("")
-  const [probability, setProbability] = useState("confirmed")
-  // редактирование строки (всегда PATCH /inflows/{id}, режим mode тут не при чём)
+  const [filter, setFilter] = useState<"all" | "expected" | "received">("all")
+  const [adding, setAdding] = useState(false)
+  const [addForm, setAddForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [editAmount, setEditAmount] = useState("")
-  const [editCurrency, setEditCurrency] = useState("USD")
-  const [editDate, setEditDate] = useState("")
-  const [editProbability, setEditProbability] = useState("confirmed")
-  const [editCounterparty, setEditCounterparty] = useState("")
-  const [editDirection, setEditDirection] = useState("")
+  const [editForm, setEditForm] = useState<FormState>(EMPTY_FORM)
+  const feedRef = useRef<HTMLDivElement>(null)
+  const { base, conv } = useConverter()
 
   const load = useCallback(async () => {
     const [inc, infs, dirs] = await Promise.all([
@@ -123,295 +439,271 @@ export default function Income() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  const counterparties = useMemo(() => {
-    const c = new Set<string>()
-    inflows.forEach((i) => { if (i.counterparty) c.add(i.counterparty) })
-    return [...c].sort()
-  }, [inflows])
-
-  // ожидаемые сверху по дате ↑, факты снизу по дате ↓
+  // ожидаемые сверху (регулярные первыми, затем по дате ↑); факты снизу по дате ↓
   const rows = useMemo(() => {
+    const recRank = (x: Inflow) => (isRegular(x.recurrence) ? 0 : 1)
     return [...inflows].sort((a, b) => {
-      const ae = a.status === "expected" ? 0 : 1
-      const be = b.status === "expected" ? 0 : 1
+      const ae = a.status === "received" ? 1 : 0
+      const be = b.status === "received" ? 1 : 0
       if (ae !== be) return ae - be
-      return ae === 0
-        ? a.expected_date.localeCompare(b.expected_date)
-        : b.expected_date.localeCompare(a.expected_date)
+      if (ae === 0) {
+        if (recRank(a) !== recRank(b)) return recRank(a) - recRank(b)
+        return a.expected_date.localeCompare(b.expected_date)
+      }
+      return b.expected_date.localeCompare(a.expected_date)
     })
   }, [inflows])
+
+  const expectedRows = useMemo(() => inflows.filter((i) => i.status === "expected"), [inflows])
+  // FX-конверсия в базу + нормализация ВСЕХ повторяющихся (не только monthly) в месяц (#23)
+  const regularMonthly = useMemo(
+    () => regularMonthlyIncome(expectedRows, conv),
+    [expectedRows, conv],
+  )
 
   if (!data) return <div className="py-20 text-center text-sm text-muted-foreground">Загрузка…</div>
 
   const cur = data.base_currency
-  const maxDirection = Math.max(1, ...Object.values(data.by_direction))
 
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
+  function setAdd<K extends keyof FormState>(k: K, v: FormState[K]) {
+    setAddForm((f) => ({ ...f, [k]: v }))
+  }
+  function setEdit<K extends keyof FormState>(k: K, v: FormState[K]) {
+    setEditForm((f) => ({ ...f, [k]: v }))
+  }
+
+  function openAdd() {
+    setEditingId(null)
+    setAddForm(EMPTY_FORM)
+    setAdding(true)
+    requestAnimationFrame(() => feedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
+
+  function startEdit(i: Inflow) {
+    setAdding(false)
+    setEditingId(i.id)
+    setEditForm({
+      source: i.counterparty || i.direction || "",
+      amount: String(i.amount),
+      currency: i.currency,
+      recurrence: i.recurrence,
+      date: i.expected_date,
+      probability: i.probability,
+    })
+  }
+
+  // источник пишем и в counterparty (от кого), и в direction (если из справочника).
+  function sourcePayload(source: string) {
+    const s = source.trim()
+    if (!s) return { counterparty: null, direction: null }
+    const isDir = directions.some((d) => d.name === s)
+    return isDir ? { counterparty: null, direction: s } : { counterparty: s, direction: null }
+  }
+
+  async function submitAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    const formEl = e.currentTarget
-    const fd = new FormData(formEl)
-    if (mode === "received") {
-      await api.post("/income", {
-        amount: Number(fd.get("amount")),
-        currency,
-        counterparty: (fd.get("counterparty") as string) || null,
-        direction: direction.trim() || null,
-        received_date: fd.get("received_date"),
-      })
-    } else {
-      await api.post("/inflows", {
-        amount: Number(fd.get("amount")),
-        currency,
-        expected_date: fd.get("expected_date"),
-        probability,
-        counterparty: (fd.get("counterparty") as string) || null,
-        direction: direction.trim() || null,
-      })
-    }
-    formEl.reset()
-    setDirection("")
+    const f = e.currentTarget
+    await api.post("/inflows", {
+      amount: Number(addForm.amount),
+      currency: addForm.currency,
+      expected_date: addForm.date,
+      probability: addForm.probability,
+      recurrence: addForm.recurrence,
+      ...sourcePayload(addForm.source),
+    })
+    f.reset()
+    setAdding(false)
+    setAddForm(EMPTY_FORM)
+    void load()
+    void refreshCurrencies()
+  }
+
+  async function submitEdit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (editForm.amount === "" || editingId === null) return
+    await api.patch(`/inflows/${editingId}`, {
+      amount: Number(editForm.amount),
+      currency: editForm.currency,
+      expected_date: editForm.date,
+      probability: editForm.probability,
+      recurrence: editForm.recurrence,
+      ...sourcePayload(editForm.source),
+    })
+    setEditingId(null)
+    setEditForm(EMPTY_FORM)
     void load()
     void refreshCurrencies()
   }
 
   const setInfStatus = (id: number, status: string) =>
     api.patch(`/inflows/${id}`, { status }).then(load)
+  const removeInflow = (id: number) => api.delete(`/inflows/${id}`).then(load)
 
-  function startEdit(i: Inflow) {
-    setEditingId(i.id)
-    setEditAmount(String(i.amount))
-    setEditCurrency(i.currency)
-    setEditDate(i.expected_date)
-    setEditProbability(i.probability)
-    setEditCounterparty(i.counterparty ?? "")
-    setEditDirection(i.direction ?? "")
-    window.scrollTo({ top: 0, behavior: "smooth" })
-  }
+  const visible = rows.filter((i) =>
+    filter === "all" ? true : filter === "expected" ? i.status === "expected" : i.status === "received",
+  )
+  const expVisible = visible.filter((i) => i.status === "expected")
+  const rcvVisible = visible.filter((i) => i.status !== "expected")
 
-  function resetEdit() {
-    setEditingId(null)
-    setEditAmount(""); setEditCurrency("USD"); setEditDate("")
-    setEditProbability("confirmed"); setEditCounterparty(""); setEditDirection("")
-  }
-
-  async function saveEdit(e: React.FormEvent) {
-    e.preventDefault()
-    if (editAmount === "") return
-    await api.patch(`/inflows/${editingId}`, {
-      amount: Number(editAmount),
-      currency: editCurrency,
-      expected_date: editDate,
-      probability: editProbability,
-      counterparty: editCounterparty.trim() || null,
-      direction: editDirection.trim() || null,
-    })
-    resetEdit()
-    void load()
-    void refreshCurrencies()
+  function renderRow(i: Inflow) {
+    if (editingId === i.id) {
+      return (
+        <InlineForm
+          key={`edit-${i.id}`}
+          kind="edit"
+          state={editForm}
+          set={setEdit}
+          directions={directions}
+          onSubmit={submitEdit}
+          onCancel={() => setEditingId(null)}
+          onDelete={() => { setEditingId(null); void removeInflow(i.id) }}
+        />
+      )
+    }
+    return (
+      <ReadRow
+        key={`row-${i.id}`}
+        i={i}
+        base={base}
+        conv={conv}
+        onEdit={() => startEdit(i)}
+        onMark={() => setInfStatus(i.id, "received")}
+        onLost={() => setInfStatus(i.id, "lost")}
+        onReturn={() => setInfStatus(i.id, "expected")}
+        onDelete={() => removeInflow(i.id)}
+      />
+    )
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Деньги на входе</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {mode === "received"
-              ? "Факт: сколько, от кого и по какому направлению. Объясняет скачок остатков — burn rate точнее. Архивные доходы записывай реальной датой: всё до первого снимка не трогает прогноз, попадает только в сводки."
-              : "Ожидаемое поступление с вероятностью. Попадает в прогноз (взвешенно по сценариям). Получишь — жми «получено», оно станет фактом дохода."}
-          </p>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <div className="inline-flex w-fit rounded-lg border bg-muted/40 p-0.5 text-sm">
-            <button type="button" onClick={() => setMode("received")}
-              className={cn("rounded-md px-3 py-1 transition-colors",
-                mode === "received" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}>
-              Получено
-            </button>
-            <button type="button" onClick={() => setMode("expected")}
-              className={cn("rounded-md px-3 py-1 transition-colors",
-                mode === "expected" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}>
-              Ожидается
-            </button>
-          </div>
+    <div className="flex flex-col gap-4">
+      <SectionHelp route="/income" title="Доходы">
+        Два вида денег на входе: то, что вы уже <b>получили</b>, и то, что <b>ожидаете</b>. Ожидаемое попадает в прогноз с поправкой на вероятность. Пришли деньги — нажмите «получено».
+      </SectionHelp>
 
-          {mode === "received" ? (
-            <form key="received" onSubmit={submit} className="flex flex-wrap items-center gap-2">
-              <Input name="received_date" type="date" defaultValue={todayIso()} className="w-40" />
-              <Input name="amount" type="number" step="any" placeholder="Сумма" required className="w-28" />
-              <CurrencySelect value={currency} onChange={setCurrency} />
-              <Input name="counterparty" placeholder="От кого (Atamura…)" list="dl-cp" className="w-44" />
-              <RefCombo options={directions} value={direction} onChange={setDirection} placeholder="Направление" />
-              <Button type="submit">Записать</Button>
-            </form>
-          ) : (
-            <form key="expected" onSubmit={submit} className="flex flex-wrap items-center gap-2">
-              <Input name="amount" type="number" step="any" placeholder="Сумма" required className="w-28" />
-              <CurrencySelect value={currency} onChange={setCurrency} />
-              <Input name="expected_date" type="date" required className="w-40" />
-              <Select value={probability} onValueChange={setProbability}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="confirmed">точно (100%)</SelectItem>
-                  <SelectItem value="likely">скорее всего (70%)</SelectItem>
-                  <SelectItem value="possible">под вопросом (30%)</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input name="counterparty" placeholder="От кого (Oasis…)" list="dl-cp" className="w-44" />
-              <RefCombo options={directions} value={direction} onChange={setDirection} placeholder="Направление" />
-              <Button type="submit">Добавить</Button>
-            </form>
-          )}
-          <datalist id="dl-cp">{counterparties.map((c) => <option key={c} value={c} />)}</datalist>
-        </CardContent>
-      </Card>
+      {/* heading */}
+      <div className="flex items-start justify-between gap-5" data-coach="income-form">
+        <div>
+          <h2 className="text-[21px] font-semibold tracking-[-0.03em]">Доходы</h2>
+          <p className="mt-0.5 text-[13px] text-ink-3">Поступления, которые питают прогноз</p>
+        </div>
+        <button onClick={openAdd}
+          className="inline-flex h-[37px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-primary bg-primary px-4 text-[13.5px] font-medium text-primary-foreground shadow-sm transition-[filter] hover:brightness-105">
+          <IcPlus className="h-4 w-4" />Добавить доход
+        </button>
+      </div>
 
-      {editingId !== null && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Редактировать поступление</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form key="edit" onSubmit={saveEdit} className="flex flex-wrap items-center gap-2">
-              <Input value={editAmount} onChange={(e) => setEditAmount(e.target.value)}
-                type="number" step="any" placeholder="Сумма" required className="w-28" />
-              <CurrencySelect value={editCurrency} onChange={setEditCurrency} />
-              <Input value={editDate} onChange={(e) => setEditDate(e.target.value)}
-                type="date" required className="w-40" />
-              <Select value={editProbability} onValueChange={setEditProbability}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="confirmed">точно (100%)</SelectItem>
-                  <SelectItem value="likely">скорее всего (70%)</SelectItem>
-                  <SelectItem value="possible">под вопросом (30%)</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input value={editCounterparty} onChange={(e) => setEditCounterparty(e.target.value)}
-                placeholder="От кого" className="w-44" />
-              <RefCombo options={directions} value={editDirection} onChange={setEditDirection} placeholder="Направление" />
-              <Button type="submit">Сохранить</Button>
-              <Button type="button" variant="ghost" onClick={resetEdit}>Отмена</Button>
-            </form>
-          </CardContent>
-        </Card>
+      {data.expected.total > 0 && (
+        <PipelineTop data={data} expectedRows={expectedRows} cur={cur} regularMonthly={regularMonthly} />
       )}
 
-      {data.expected.total > 0 && <ExpectedPipeline data={data.expected} cur={cur} />}
+      {/* unified feed */}
+      <section ref={feedRef} className="rounded-lg border border-border bg-card px-2 pb-3 pt-2 shadow-sm">
+        <div className="flex items-center justify-between gap-3.5 px-4 pb-3 pt-3.5">
+          <h3 className="text-[15.5px] font-semibold tracking-[-0.02em]">Все поступления</h3>
+          <div className="flex gap-px rounded-lg border border-border bg-card-2 p-[3px]">
+            {([["all", "Все"], ["expected", "Ожидается"], ["received", "Получено"]] as const).map(([f, label]) => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={cn(
+                  "whitespace-nowrap rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors",
+                  filter === f ? "bg-card text-foreground shadow-sm" : "text-ink-3 hover:text-ink-2",
+                )}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">По направлениям</CardTitle>
-            <p className="text-xs text-muted-foreground">фактически полученные доходы</p>
-          </CardHeader>
-          <CardContent>
-            {Object.keys(data.by_direction).length ? (
-              <div className="flex flex-col gap-3">
-                {Object.entries(data.by_direction)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([dir, total]) => (
+        {adding && (
+          <InlineForm
+            kind="add"
+            state={addForm}
+            set={setAdd}
+            directions={directions}
+            onSubmit={submitAdd}
+            onCancel={() => setAdding(false)}
+          />
+        )}
+
+        {visible.length === 0 && !adding ? (
+          <p className="px-4 py-10 text-center text-sm text-ink-3">
+            Пока пусто — нажмите «Добавить доход».
+          </p>
+        ) : (
+          <>
+            {expVisible.length > 0 && filter !== "received" && (
+              <>
+                <GroupLabel text="Ожидается" n={expVisible.length} />
+                {expVisible.map(renderRow)}
+              </>
+            )}
+            {rcvVisible.length > 0 && filter !== "expected" && (
+              <>
+                <GroupLabel text="Получено" n={rcvVisible.length} />
+                {rcvVisible.map(renderRow)}
+              </>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* summaries: by direction + by month (as on current page) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div className="mb-3 flex items-center gap-1.5 text-sm font-medium">
+            По направлениям
+            <InfoHint>Направление — откуда пришли деньги (Фриланс, Консалтинг…). Настраивается в Настройках.</InfoHint>
+          </div>
+          {Object.keys(data.by_direction).length ? (
+            <div className="flex flex-col gap-3">
+              {Object.entries(data.by_direction)
+                .sort(([, a], [, b]) => b - a)
+                .map(([dir, total]) => {
+                  const maxDir = Math.max(1, ...Object.values(data.by_direction))
+                  return (
                     <div key={dir}>
                       <div className="mb-1 flex items-baseline justify-between text-sm">
                         <span className="font-medium">{dir}</span>
-                        <span className="tabular-nums text-emerald-600">+{money(total)} {cur}</span>
+                        <span className="tnum text-pos">+{money(total)} {cur}</span>
                       </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                        <div className="h-full rounded-full bg-emerald-600/80" style={{ width: `${(total / maxDirection) * 100}%` }} />
+                      <div className="h-1.5 overflow-hidden rounded-full bg-card-2">
+                        <div className="h-full rounded-full bg-pos/70" style={{ width: `${(total / maxDir) * 100}%` }} />
                       </div>
                     </div>
-                  ))}
-                <Separator />
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-semibold">Итого</span>
-                  <span className="font-semibold tabular-nums">{money(data.total)} {cur}</span>
-                </div>
+                  )
+                })}
+              <div className="my-1 h-px bg-line-2" />
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="font-semibold">Итого</span>
+                <span className="font-semibold tnum">{money(data.total)} {cur}</span>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Пока пусто.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">По месяцам</CardTitle>
-            <p className="text-xs text-muted-foreground">фактически полученные доходы</p>
-          </CardHeader>
-          <CardContent>
-            {Object.keys(data.by_month).length ? (
-              <Table>
-                <TableBody>
-                  {Object.entries(data.by_month)
-                    .sort(([a], [b]) => b.localeCompare(a))
-                    .map(([m, total]) => (
-                      <TableRow key={m}>
-                        <TableCell className="font-medium">{monthLabel(m)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-emerald-600">+{money(total)} {cur}</TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-sm text-muted-foreground">Пока пусто.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Все поступления</CardTitle>
-          <p className="text-xs text-muted-foreground">ожидаемые и полученные — одна лента</p>
-        </CardHeader>
-        <CardContent>
-          {rows.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">Дата</TableHead>
-                  <TableHead>От кого / что</TableHead>
-                  <TableHead>Направление</TableHead>
-                  <TableHead className="text-right">Сумма</TableHead>
-                  <TableHead className="w-32">Статус</TableHead>
-                  <TableHead className="w-44" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((i) => (
-                  <TableRow key={i.id} className={i.status === "lost" ? "opacity-45" : undefined}>
-                    <TableCell className="tabular-nums text-muted-foreground">{ddmm(i.expected_date)}</TableCell>
-                    <TableCell className="font-medium">{i.counterparty || i.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{i.direction ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-600">+{money(i.amount)} {i.currency}</TableCell>
-                    <TableCell>
-                      <Badge variant={i.status === "received" ? "secondary" : "outline"}>{INF_STATUS[i.status]}</Badge>
-                      {i.status === "expected" && (
-                        <span className="ml-1.5 text-xs text-muted-foreground">{PROB_LABEL[i.probability]}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <GhostBtn onClick={() => startEdit(i)}>✎</GhostBtn>
-                      {i.status === "expected" ? (
-                        <>
-                          <GhostBtn onClick={() => setInfStatus(i.id, "received")}>получено</GhostBtn>
-                          <GhostBtn onClick={() => setInfStatus(i.id, "lost")}>потеряно</GhostBtn>
-                        </>
-                      ) : (
-                        <GhostBtn onClick={() => setInfStatus(i.id, "expected")}>вернуть</GhostBtn>
-                      )}
-                      <GhostBtn className="h-7 px-2 text-xs text-red-500" onClick={() => api.delete(`/inflows/${i.id}`).then(load)}>✕</GhostBtn>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Пока пусто — запиши доход или добавь ожидаемое поступление выше.
-            </p>
+            <p className="text-sm text-ink-3">Пока пусто.</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div className="mb-3 text-sm font-medium">По месяцам</div>
+          {Object.keys(data.by_month).length ? (
+            <div className="flex flex-col">
+              {Object.entries(data.by_month)
+                .sort(([a], [b]) => b.localeCompare(a))
+                .map(([m, total], idx) => (
+                  <div key={m} className={cn(
+                    "flex items-center justify-between py-2 text-sm",
+                    idx > 0 && "border-t border-line-2",
+                  )}>
+                    <span className="font-medium">{monthLabel(m)}</span>
+                    <span className="tnum text-pos">+{money(total)} {cur}</span>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="text-sm text-ink-3">Пока пусто.</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

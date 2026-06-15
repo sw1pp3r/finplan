@@ -18,5 +18,14 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Экспериментальные правила eslint-plugin-react-hooks v7 (RC): срабатывают на
+      // идиоматичном коде по всей кодовой базе (async-загрузка в эффекте, Math.random
+      // в конфетти, инлайн-подкомпоненты). Кодовая база написана до их появления —
+      // отключаем именно их; стабильные rules-of-hooks/exhaustive-deps остаются.
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/static-components": "off",
+    },
   },
 ])

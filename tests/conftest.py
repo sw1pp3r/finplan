@@ -4,8 +4,8 @@ import pytest
 
 
 def test_db_url() -> str:
-    """Database under test. In-memory SQLite by default; CI sets TEST_DATABASE_URL
-    to a Postgres URL so the whole suite runs against the same engine as production."""
+    """Database under test. In-memory SQLite by default; set TEST_DATABASE_URL to a
+    Postgres URL (CI does this) so the suite runs against the same engine as production."""
     return os.environ.get("TEST_DATABASE_URL", "sqlite://")
 
 
