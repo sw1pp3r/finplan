@@ -48,7 +48,7 @@ credentials, an external database or SQLite, FX fetch, an API token), copy
 finplan is a forecast engine, not a ledger. There is no bank import and no transaction
 categorization — you maintain a few small, deliberate inputs and it does the projection.
 
-- **Snapshot → starting point (T0).** On the *Снимок* (Snapshot) tab you record the
+- **Snapshot → starting point (T0).** On the *Баланс* (Balance) tab you record the
   current balance of each account. The most recent snapshot is **T0**, where the
   forecast starts. Several snapshots over time yield a **burn rate** — how fast the
   balance drains per week.
@@ -69,6 +69,28 @@ neither affects the forecast unless you promote a wish into an obligation.
 
 A built-in **demo mode** (toggle in the header) shows the app with realistic sample data
 in a separate in-memory database; your real data is never touched.
+
+---
+
+## Sections
+
+The app is a sidebar of focused tabs:
+
+- **Дашборд** (Dashboard) — the balance curve with three scenarios, a cushion line and a
+  negative zone, a period selector (2 weeks … 1 year), and headline cards: runway,
+  balance, income/month, free/month.
+- **Баланс** (Balance) — record the current balance of each account; the latest entry is T0.
+- **Доходы** (Income) — expected and received money in one feed (*expected* lifts the
+  forecast; *received* is already in your balance).
+- **Расходы** (Expenses) — obligations (rent, taxes, subscriptions, one-offs) normalized to
+  a monthly figure, plus a break-even ("how much must I earn per month").
+- **Мечты** (Wishes) — a list and an expressive **board**; each dream is tagged
+  *по карману / впритык / не хватает* against your free headroom.
+- **Ещё** (More) — an optional sandbox to model course/product economics; it never affects
+  the forecast.
+- **Настройки** (Settings) — base currency, FX rates, cushion, planning horizon, accounts, profile.
+
+A first-run **onboarding wizard** walks you through setup, and a **dark theme** is available.
 
 ---
 
