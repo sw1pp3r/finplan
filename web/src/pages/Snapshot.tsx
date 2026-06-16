@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Link } from "react-router-dom"
 import {
   Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts"
@@ -30,7 +30,6 @@ const parseAmount = (raw: string) =>
   Number(raw.replace(/\s/g, "").replace(",", "."))
 
 export default function Snapshot() {
-  const navigate = useNavigate()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [last, setLast] = useState<LastSnapshot | null>(null)
   const [history, setHistory] = useState<SnapshotHistory | null>(null)
@@ -39,6 +38,8 @@ export default function Snapshot() {
   const [takenAt, setTakenAt] = useState(todayIso())
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const triedFx = useRef(false)
 
   // префилл «Сейчас» последним известным остатком по каждому счёту (даже если счёт
   // выпал из последнего снимка) — чтобы ничего не обнулялось молча
@@ -59,7 +60,17 @@ export default function Snapshot() {
     setAccounts(accs)
     setLast(lastSnap)
     setHistory(hist)
-    setRates(rt)
+    // у счётной валюты нет курса → счёт = 0 в базовой (BUG-007). Подтягиваем курсы
+    // используемых валют один раз; если сеть/er-api не дали — остаёмся как есть.
+    if (rt.missing && rt.missing.length > 0 && !triedFx.current) {
+      triedFx.current = true
+      try {
+        await api.post("/fx/refresh", {})
+        setRates(await api.get<Rates>("/rates"))
+      } catch { setRates(rt) }
+    } else {
+      setRates(rt)
+    }
     await seedFromPrefill()
   }, [seedFromPrefill])
 
@@ -145,8 +156,17 @@ export default function Snapshot() {
       .map((i) => ({ account_id: i.account_id, amount: Number(i.raw) }))
     if (!items.length) return
     setBusy(true)
-    await api.post("/snapshots", { taken_at: takenAt, items })
-    navigate("/")
+    try {
+      await api.post("/snapshots", { taken_at: takenAt, items })
+      setEditing(false)
+      await load()  // обновляем «Прошлый»/историю/итого + пере-сеем «Сейчас»
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2200)
+    } finally {
+      setBusy(false)
+    }
+    // НЕ навигируем на дашборд: внезапный переход сбивал онбординг-тур (он на /balance,
+    // тур возвращал назад → петля, «дальше не идёт») и просто удивлял. Остаёмся на месте.
   }
 
   const histRows = (history?.items ?? [])
@@ -294,7 +314,7 @@ export default function Snapshot() {
               </Table>
               <div className="flex items-center gap-3">
                 <Input type="date" className="w-40" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} />
-                <Button type="submit" disabled={busy}>{busy ? "Сохраняю…" : "Записать баланс"}</Button>
+                <Button type="submit" disabled={busy}>{busy ? "Сохраняю…" : saved ? "Записано ✓" : "Записать баланс"}</Button>
                 {editing && (
                   <Button type="button" variant="ghost" onClick={() => void newSnapshot()}>
                     ← Новая запись на сегодня
