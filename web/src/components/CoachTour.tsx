@@ -141,7 +141,18 @@ export function CoachTour() {
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [view, setView] = useState<View | null>(null)
   const [ready, setReady] = useState(false)
+  const [vp, setVp] = useState(() => ({
+    w: typeof window !== "undefined" ? window.innerWidth : 0,
+    h: typeof window !== "undefined" ? window.innerHeight : 0,
+  }))
   const cardRef = useRef<HTMLDivElement>(null)
+
+  // размеры вьюпорта для затемнения-«диафрагмы» (полосы дима тянутся до краёв экрана)
+  useEffect(() => {
+    const onResize = () => setVp({ w: window.innerWidth, h: window.innerHeight })
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
 
   const step: CoachStep | null = idx !== null ? COACH_STEPS[idx] : null
 
@@ -178,9 +189,12 @@ export function CoachTour() {
       !a || Math.abs(a.top - b.top) > 0.5 || Math.abs(a.left - b.left) > 0.5 ||
       Math.abs(a.width - b.width) > 0.5 || Math.abs(a.height - b.height) > 0.5
 
-    // цели ещё нет на этой странице → убираем устаревшую подсветку прошлого шага (показываем вуаль)
+    // цели ещё нет на этой странице → убираем устаревшую подсветку прошлого шага
     if (!find()) setRect(null)
 
+    let stable = 0 // кадров подряд без сдвига цели
+    let frames = 0
+    let opened = false
     const tick = () => {
       if (cancelled) return
       const el = find()
@@ -195,12 +209,24 @@ export function CoachTour() {
           }
         }
         const r = el.getBoundingClientRect()
-        if (r.height > 0 && differ(last, r)) {
-          last = r
-          setRect(r)
-          setReady(true)
+        if (r.height > 0) {
+          if (differ(last, r)) {
+            last = r
+            setRect(r)
+            stable = 0 // цель ещё едет (рефлоу/скролл/анимация) — ждём, пока встанет
+          } else if (stable < 999) {
+            stable++
+          }
+          // «открываем» подсветку (ready) только когда цель устаканилась ~6 кадров (≈100мс) —
+          // тогда «диафрагма» раскрывается сразу на финальном месте, а не там, куда цель потом
+          // уедет рефлоу. Фолбэк ~2с — на случай вечно «дышащей» цели.
+          if (!opened && (stable >= 6 || frames > 120)) {
+            opened = true
+            setReady(true)
+          }
         }
       }
+      frames++
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -255,39 +281,59 @@ export function CoachTour() {
           затемнения; pointer-events:none — клики проходят к подсвеченному контролу */}
       {step && idx !== null && (
         <div className="pointer-events-none fixed inset-0 z-40" data-coach-overlay>
-          {/* spotlight: подсветка целевого контрола + затемнение вокруг. Показываем ТОЛЬКО когда
-              шаг «устаканился» (visible: цель найдена, доскроллена и измерена) — иначе на переходе
-              между шагами/страницами рамка успевала мелькнуть не на том блоке. До этого — вуаль. */}
-          {visible && spot ? (
-            <div
-              data-coach-spotlight
-              className="pointer-events-none fixed rounded-xl"
-              style={{
-                top: spot.top,
-                left: spot.left,
-                width: spot.width,
-                height: spot.height,
-                boxShadow: "0 0 0 9999px rgba(2,6,23,0.55)",
-                outline: "2px solid var(--primary)",
-                outlineOffset: 2,
-              }}
-            />
-          ) : (
-            // пока цель ищется/доскролливается — общая вуаль, чтобы было видно, что тур активен
-            <div className="pointer-events-none fixed inset-0 bg-[rgba(2,6,23,0.45)]" />
-          )}
+          {/* Затемнение-«диафрагма»: дим из четырёх полос вокруг дырки. Дим ПОСТОЯННЫЙ (полосы
+              всегда покрывают экран), анимируется только дырка — раскрывается на цели, когда шаг
+              устаканился (visible), и схлопывается между шагами. Так нет ни мигания дима, ни рамки
+              «не на том блоке»: дырка открывается только на финальной позиции цели. */}
+          {(() => {
+            const open = visible && spot
+            // открыто → дырка = цель; закрыто → точка в центре цели (схлопывается «в себя») или
+            // экрана, если цели нет ещё → плавная диафрагма.
+            const cx = spot ? spot.left + spot.width / 2 : vp.w / 2
+            const cy = spot ? spot.top + spot.height / 2 : vp.h / 2
+            const h = open && spot ? spot : { top: cy, left: cx, width: 0, height: 0 }
+            const hr = h.left + h.width
+            const hb = h.top + h.height
+            const E = "420ms cubic-bezier(0.4,0,0.2,1)"
+            const tr = `top ${E}, left ${E}, width ${E}, height ${E}`
+            const band: React.CSSProperties = { position: "fixed", background: "rgba(2,6,23,0.55)", transition: tr }
+            return (
+              <>
+                <div className="pointer-events-none" style={{ ...band, top: 0, left: 0, width: vp.w, height: Math.max(0, h.top) }} />
+                <div className="pointer-events-none" style={{ ...band, top: hb, left: 0, width: vp.w, height: Math.max(0, vp.h - hb) }} />
+                <div className="pointer-events-none" style={{ ...band, top: h.top, left: 0, width: Math.max(0, h.left), height: h.height }} />
+                <div className="pointer-events-none" style={{ ...band, top: h.top, left: hr, width: Math.max(0, vp.w - hr), height: h.height }} />
+                <div
+                  data-coach-spotlight
+                  className="pointer-events-none fixed rounded-xl"
+                  style={{
+                    top: h.top, left: h.left, width: h.width, height: h.height,
+                    outline: "2px solid var(--primary)", outlineOffset: 2,
+                    opacity: open ? 1 : 0,
+                    transition: `${tr}, opacity 220ms ease`,
+                  }}
+                />
+              </>
+            )
+          })()}
 
-          {/* карточка что/зачем/как (появляется мягким fade+rise на каждом шаге) */}
+          {/* карточка что/зачем/как: мягкий fade+rise при появлении и плавный переезд к новой
+              позиции между шагами (top/left анимируются вместе с «диафрагмой») */}
           <div
             ref={cardRef}
             data-coach-card
             data-coach-placement={cur?.placement}
             role="dialog"
             aria-modal="false"
-            className={`fixed max-w-[92vw] rounded-xl border bg-background p-5 text-sm shadow-2xl${
-              visible ? " coach-card-in" : ""
-            }`}
-            style={cardStyle}
+            className="fixed max-w-[92vw] rounded-xl border bg-background p-5 text-sm shadow-2xl"
+            style={{
+              ...cardStyle,
+              opacity: visible ? 1 : 0,
+              transform: visible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
+              transition:
+                "opacity 240ms ease, transform 240ms cubic-bezier(0.4,0,0.2,1), " +
+                "top 420ms cubic-bezier(0.4,0,0.2,1), left 420ms cubic-bezier(0.4,0,0.2,1)",
+            }}
           >
             <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Настройка · шаг {idx + 1} из {COACH_STEPS.length}
