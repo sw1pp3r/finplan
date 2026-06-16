@@ -900,3 +900,25 @@ def test_change_base_currency_same_is_noop(client):
     r = client.patch("/api/settings", json={"base_currency": "USD"})
     assert r.status_code == 200
     assert client.get("/api/summary").json()["base_currency"] == "USD"
+
+
+def test_fx_refresh_currency_fetches_rate_for_rebase(client, monkeypatch):
+    # BUG-001: пользователь выбирает базовой валюту без курса (RUB) — фронт дёргает
+    # /fx/refresh?currency=RUB, курс подтягивается в фоне, и смена базы проходит сама,
+    # без просьбы «сначала добавьте курс вручную».
+    import httpx
+    import app.fx as fx
+    make_account(client, "Bank", "USD")
+    # без курса смена базы по-прежнему отклоняется (контракт patch /settings не меняем)
+    assert client.patch("/api/settings", json={"base_currency": "RUB"}).status_code == 400
+    # мокаем er-api: 1 USD = 90 RUB
+    monkeypatch.setattr(fx.httpx, "get",
+                        lambda url, timeout=20: httpx.Response(200, json={"result": "success", "rates": {"RUB": 90.0, "USD": 1.0}},
+                                                              request=httpx.Request("GET", url)))
+    r = client.post("/api/fx/refresh?currency=RUB")
+    assert r.status_code == 200
+    assert r.json()["written"] >= 1
+    # теперь смена базы на RUB проходит и пересчитывает курсы
+    r2 = client.patch("/api/settings", json={"base_currency": "RUB"})
+    assert r2.status_code == 200, r2.text
+    assert client.get("/api/settings").json()["base_currency"] == "RUB"

@@ -196,18 +196,23 @@ export type Rates = {
   missing: string[]
 }
 
-// Демо-режим: флаг в localStorage. Когда включён — все запросы шлют X-Demo: 1,
+// Демо-режим: флаг в localStorage. Когда включён — запросы шлют X-Demo: 1 И ?demo=1,
 // и бэкенд отдаёт фейк из отдельной in-memory БД (показ на расшаренном экране).
+// Квери-параметр дублирует заголовок: некоторые прокси/CDN (напр. Railway) режут
+// кастомные заголовки → без дубля демо-данные не доезжали.
 const DEMO_KEY = "finplan-demo"
 export const isDemo = () =>
   typeof localStorage !== "undefined" && localStorage.getItem(DEMO_KEY) === "1"
 export const setDemo = (on: boolean) => localStorage.setItem(DEMO_KEY, on ? "1" : "0")
 
+const withDemo = (path: string) =>
+  isDemo() ? path + (path.includes("?") ? "&" : "?") + "demo=1" : path
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers["Content-Type"] = "application/json"
   if (isDemo()) headers["X-Demo"] = "1"
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`/api${withDemo(path)}`, {
     method,
     headers: Object.keys(headers).length ? headers : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -219,7 +224,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 async function uploadFile<T>(path: string, form: FormData): Promise<T> {
   const headers: Record<string, string> = {}
   if (isDemo()) headers["X-Demo"] = "1"  // Content-Type не ставим — браузер сам с boundary
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`/api${withDemo(path)}`, {
     method: "POST",
     headers: Object.keys(headers).length ? headers : undefined,
     body: form,

@@ -300,13 +300,20 @@ export default function Settings() {
     setBaseBusy(true); setBaseErr(null)
     try {
       await api.patch("/settings", { base_currency: next })
-      await load()
-      void refreshCurrencies()
     } catch {
-      setBaseErr(`Сначала добавьте курс для ${next} в «Валютах и курсах» ниже — без него не пересчитать.`)
-    } finally {
-      setBaseBusy(false)
+      // нет курса для новой базы → подтягиваем его в фоне и повторяем (без нага юзеру)
+      try {
+        await api.post(`/fx/refresh?currency=${encodeURIComponent(next)}`, {})
+        await api.patch("/settings", { base_currency: next })
+      } catch {
+        setBaseErr(`Не удалось получить курс для ${next}. Можно задать его вручную в «Валютах и курсах» ниже.`)
+        setBaseBusy(false)
+        return
+      }
     }
+    await load()
+    void refreshCurrencies()
+    setBaseBusy(false)
   }
 
   function toggleDemo() {

@@ -23,6 +23,16 @@ def test_demo_header_serves_seeded_demo_data():
         assert len(demo_accounts) > 0
 
 
+def test_demo_query_param_serves_seeded_demo_data():
+    # BUG-005: фолбэк для прокси/CDN, которые режут кастомный заголовок X-Demo —
+    # ?demo=1 в URL тоже роутит на демо-БД (Railway не доставлял демо-данные).
+    with make_client() as c:
+        assert c.get("/api/accounts").json() == []          # без сигнала — пусто
+        assert c.get("/api/summary?demo=1").json()["t0"] > 0  # ?demo=1 → демо-набор
+        assert len(c.get("/api/accounts?demo=1").json()) > 0
+        assert c.get("/api/accounts").json() == []          # реальная БД не тронута
+
+
 def test_demo_data_populates_all_tabs():
     # демо-набор должен оживить каждую вкладку, а не только дашборд
     with make_client() as c:

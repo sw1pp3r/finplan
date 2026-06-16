@@ -52,8 +52,10 @@ router = APIRouter(prefix="/api")
 def get_db(request: Request):
     state = request.app.state
     demo = getattr(state, "DemoSessionLocal", None)
-    # X-Demo: 1 → отдельная in-memory демо-БД (показ на Zoom), реальную не трогаем
-    if demo is not None and request.headers.get("X-Demo") == "1":
+    # Демо: заголовок X-Demo ИЛИ ?demo=1 → отдельная in-memory демо-БД (реальную не трогаем).
+    # Квери-параметр — фолбэк для прокси/CDN, которые режут кастомные заголовки (напр. Railway).
+    want_demo = request.headers.get("X-Demo") == "1" or request.query_params.get("demo") == "1"
+    if demo is not None and want_demo:
         db = demo()
     else:
         db = state.SessionLocal()
@@ -843,9 +845,12 @@ def add_fx(body: FxIn, db: Session = Depends(get_db)):
 
 
 @router.post("/fx/refresh", dependencies=[Depends(require_token)])
-def refresh_fx(request: Request):
+def refresh_fx(request: Request, currency: str | None = None):
+    # currency — опц. валюта, для которой нужен курс прямо сейчас (новая базовая, ещё не
+    # «используемая»). Фронт дёргает это перед сменой базы, чтобы не просить курс вручную.
     from .fx import fetch_and_store
-    return {"written": fetch_and_store(request.app)}
+    extra = {currency.strip().upper()} if currency and currency.strip() else None
+    return {"written": fetch_and_store(request.app, extra=extra)}
 
 
 # ---------- forecast / summary ----------

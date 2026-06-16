@@ -46,14 +46,17 @@ def _used_currencies(db) -> set:
     return used
 
 
-def fetch_and_store(app) -> int:
-    """Тянет курсы для всех используемых валют. Ошибки сети не роняют приложение —
-    прогноз работает на последнем известном курсе (фолбэк по ТЗ §8)."""
+def fetch_and_store(app, extra: set | None = None) -> int:
+    """Тянет курсы для всех используемых валют (+ опц. `extra` — например, новой базовой
+    валюты, для которой ещё нет курса). Ошибки сети не роняют приложение — прогноз
+    работает на последнем известном курсе (фолбэк по ТЗ §8)."""
     from .service import get_settings
 
     with app.state.SessionLocal() as db:
         base = get_settings(db).base_currency
         currencies = _used_currencies(db)
+        if extra:
+            currencies |= {c.upper() for c in extra if c}
         if not currencies - {base}:
             return 0
         try:

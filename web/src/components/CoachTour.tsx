@@ -9,7 +9,6 @@ const CARD_W = 380
 const VP_MARGIN = 16 // минимальный отступ карточки от края экрана
 const GAP = 14 // зазор между подсветкой и карточкой
 const SPOT_PAD = 8 // на сколько подсветка выходит за пределы цели
-const HEADER_OFFSET = 76 // поднимаем цель почти под липкую шапку — освобождаем место под карточку
 
 type Placement = "below" | "above" | "right" | "left"
 type Spot = { top: number; left: number; width: number; height: number }
@@ -183,11 +182,13 @@ export function CoachTour() {
       const el = find()
       if (el) {
         ro.observe(el)
-        // поднять цель в верхнюю часть экрана — освобождаем место под карточку снизу
-        const delta = el.getBoundingClientRect().top - HEADER_OFFSET
-        if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: "smooth" })
+        // Центрируем цель в её СКРОЛЛ-КОНТЕЙНЕРЕ. На десктопе контент скроллится во
+        // внутреннем overflow-y-auto, а не в window — window.scrollBy там не работал, и
+        // далёкие цели («Счета» внизу Настроек) оставались у нижнего края, а подсветка
+        // уезжала вниз пустой коробкой. scrollIntoView скроллит нужный контейнер.
+        el.scrollIntoView({ block: "center", behavior: "smooth" })
         setRect(el.getBoundingClientRect())
-        setTimeout(settle, 340)
+        setTimeout(settle, 360)
         return
       }
       if (tries++ < 40) setTimeout(measure, 50)

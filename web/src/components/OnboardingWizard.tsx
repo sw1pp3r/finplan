@@ -255,7 +255,18 @@ export default function OnboardingWizard({ onDone }: { onDone: () => void }) {
   async function saveCurrency() {
     const body: Record<string, unknown> = { base_currency: base }
     if (name.trim()) body.display_name = name.trim()
-    await api.patch("/settings", body)
+    try {
+      await api.patch("/settings", body)
+    } catch {
+      // нет курса для выбранной базы → подтягиваем в фоне и повторяем; онбординг не блокируем
+      try {
+        await api.post(`/fx/refresh?currency=${encodeURIComponent(base)}`, {})
+        await api.patch("/settings", body)
+      } catch {
+        // курс подтянется позже; сохраним хотя бы имя, базу можно сменить в Настройках
+        if (name.trim()) { try { await api.patch("/settings", { display_name: name.trim() }) } catch { /* noop */ } }
+      }
+    }
     void refreshCurrencies()
   }
 
