@@ -26,9 +26,12 @@ const BASE_PRESETS: { code: string; label: string }[] = [
   { code: "RUB", label: "Рубли (RUB)" },
   { code: "USD", label: "Доллары (USD)" },
   { code: "EUR", label: "Евро (EUR)" },
+  { code: "KZT", label: "Тенге (KZT)" },
+  { code: "AED", label: "Дирхамы (AED)" },
 ]
 const BASE_NOW: Record<string, string> = {
   USD: "долларах (USD)", EUR: "евро (EUR)", RUB: "рублях (RUB)",
+  KZT: "тенге (KZT)", AED: "дирхамах (AED)",
 }
 const ADD = "__add__"
 
@@ -323,12 +326,14 @@ export default function Settings() {
 
   if (!settings) return <div className="py-20 text-center text-sm text-muted-foreground">Загрузка…</div>
   const cur = settings.base_currency
-  // в базовые предлагаем пресеты + текущую + любые конвертируемые (есть курс)
-  const convertible = (rates?.rates ?? []).filter((r) => !r.is_base && r.rate_to_base != null).map((r) => r.currency)
+  // в базовые предлагаем пресеты + текущую + ВСЕ известные приложению валюты (с курсом и
+  // без — курс для выбранной базы подтянется сам в changeBase). Так KZT/AED и любую валюту
+  // счёта можно выбрать базовой сразу, не добавляя курс вручную заранее.
+  const known = (rates?.rates ?? []).map((r) => r.currency)
   const baseOptions = Array.from(new Set([
     ...BASE_PRESETS.map((p) => p.code),
     cur,
-    ...convertible,
+    ...known,
   ]))
   const labelFor = (code: string) => BASE_PRESETS.find((p) => p.code === code)?.label ?? code
 

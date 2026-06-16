@@ -11,11 +11,11 @@ import { monthLabel, todayIso } from "@/lib/format"
 //   onDone() закрывает онбординг (финиш, «пропустить», «посмотреть демо»).
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Пресеты валют — RUB · USD · EUR первыми, остальное через «свою».
-const CUR_PRESET = ["RUB", "USD", "EUR"] as const
-const CUR_SYM: Record<string, string> = { RUB: "₽", USD: "$", EUR: "€", USDT: "₮", GBP: "£" }
+// Пресеты валют — частые первыми (включая KZT/AED — основная аудитория), остальное через «свою».
+const CUR_PRESET = ["USD", "KZT", "AED", "RUB", "EUR"] as const
+const CUR_SYM: Record<string, string> = { RUB: "₽", USD: "$", EUR: "€", USDT: "₮", GBP: "£", KZT: "₸", AED: "AED" }
 const CUR_NAME: Record<string, string> = {
-  RUB: "Рубль", USD: "Доллар США", EUR: "Евро", USDT: "Tether", GBP: "Фунт",
+  RUB: "Рубль", USD: "Доллар США", EUR: "Евро", USDT: "Tether", GBP: "Фунт", KZT: "Тенге", AED: "Дирхам ОАЭ",
 }
 const sym = (c: string) => CUR_SYM[c] ?? c
 
@@ -32,7 +32,7 @@ type Recurrence = (typeof PERIODS)[number]["value"]
 const PER_MUL: Record<Recurrence, number> = { weekly: 4.333, monthly: 1, yearly: 1 / 12, once: 0 }
 
 // Грубые курсы для превью сводок в мастере (бэкенд использует реальные /rates).
-const PREVIEW_RATE: Record<string, number> = { USD: 1, USDT: 1, EUR: 1.08, RUB: 0.0105, GBP: 1.27 }
+const PREVIEW_RATE: Record<string, number> = { USD: 1, USDT: 1, EUR: 1.08, RUB: 0.0105, GBP: 1.27, KZT: 0.0019, AED: 0.272 }
 
 type AcctRow = { id: number; name: string; cur: string; bal: number }
 type FlowRow = { id: number; name: string; amount: number; cur: string; period: Recurrence }
