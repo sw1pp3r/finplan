@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api, type Expenses, type Obligation, type Ref } from "@/lib/api"
+import { useCoach, COACH_STEPS } from "@/lib/coach"
 import { refreshCurrencies } from "@/lib/currencies"
 import { useConverter } from "@/lib/fx"
 import { cn } from "@/lib/utils"
@@ -195,6 +196,15 @@ export default function Plans() {
 
   useEffect(() => { void load() }, [load])
 
+  // Онбординг-тур на шаге «Расходы» подсвечивает форму добавления — авто-открываем её,
+  // чтобы подсветка легла на реальные поля, а не на заголовок (форма иначе закрыта и
+  // выглядит «затемнённой/недоступной»).
+  const coachIdx = useCoach()
+  useEffect(() => {
+    if (coachIdx !== null && COACH_STEPS[coachIdx]?.target === "expense-form") startAdd()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachIdx])
+
   function resetForm() {
     setAdding(false); setEditingId(null)
     setName(""); setAmount(""); setDueDate("")
@@ -325,7 +335,8 @@ export default function Plans() {
   const recurForm = recurrence !== "once"
   const FormRow = (
     <form key={editingId ?? "new"} onSubmit={save}
-      className={cn(GRID, "relative mx-1 my-1.5 rounded-[10px] bg-card px-4 py-3 shadow-[0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]")}>
+      className={cn(GRID, "relative mx-1 my-1.5 rounded-[10px] bg-card px-4 py-3 shadow-[0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]")}
+      data-coach="expense-form">
       {editingId === null && (
         <div className="col-span-full mb-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink-2">
           <span className="text-primary"><PlusIcon className="h-[15px] w-[15px]" /></span>Новый расход
@@ -382,7 +393,7 @@ export default function Plans() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-5" data-coach="expense-form">
+      <div className="flex items-start justify-between gap-5">
         <SectionHelp route="/plans" title="Расходы">
           Регулярные и разовые платежи (аренда, подписки, налоги). Внизу видно, сколько нужно зарабатывать в месяц, чтобы не уходить в минус. Всё это вычитается из прогноза.
         </SectionHelp>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, type Income as IncomeData, type Inflow, type Ref } from "@/lib/api"
 import { regularMonthlyIncome } from "@/lib/aggregates"
+import { useCoach, COACH_STEPS } from "@/lib/coach"
 import { refreshCurrencies } from "@/lib/currencies"
 import { useConverter } from "@/lib/fx"
 import { ddmm, money, monthLabel, todayIso } from "@/lib/format"
@@ -461,6 +462,15 @@ export default function Income() {
     [expectedRows, conv],
   )
 
+  // Онбординг-тур на шаге «Доходы» подсвечивает форму добавления — авто-открываем её,
+  // чтобы подсветка легла на поля, а не на заголовок (иначе форма закрыта и затемнена).
+  // ВАЖНО: хук должен стоять до early-return ниже, иначе порядок хуков плавает (React #310).
+  const coachIdx = useCoach()
+  useEffect(() => {
+    if (coachIdx !== null && COACH_STEPS[coachIdx]?.target === "income-form") openAdd()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachIdx])
+
   if (!data) return <div className="py-20 text-center text-sm text-muted-foreground">Загрузка…</div>
 
   const cur = data.base_currency
@@ -582,7 +592,7 @@ export default function Income() {
       </SectionHelp>
 
       {/* heading */}
-      <div className="flex items-start justify-between gap-5" data-coach="income-form">
+      <div className="flex items-start justify-between gap-5">
         <div>
           <h2 className="text-[21px] font-semibold tracking-[-0.03em]">Доходы</h2>
           <p className="mt-0.5 text-[13px] text-ink-3">Поступления, которые питают прогноз</p>
@@ -615,14 +625,16 @@ export default function Income() {
         </div>
 
         {adding && (
-          <InlineForm
-            kind="add"
-            state={addForm}
-            set={setAdd}
-            directions={directions}
-            onSubmit={submitAdd}
-            onCancel={() => setAdding(false)}
-          />
+          <div data-coach="income-form">
+            <InlineForm
+              kind="add"
+              state={addForm}
+              set={setAdd}
+              directions={directions}
+              onSubmit={submitAdd}
+              onCancel={() => setAdding(false)}
+            />
+          </div>
         )}
 
         {visible.length === 0 && !adding ? (
