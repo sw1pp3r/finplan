@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+<style data-omelette-injected>html,body{background:transparent}</style><script data-omelette-injected>(()=>{var j=[];var x=false;var S=30000;var f=3000;document.addEventListener("DOMContentLoaded",()=>{const H=window.Babel;const G="om-src-id";if(H&&H.registerPlugin&&!(H.availablePlugins&&H.availablePlugins[G])){H.registerPlugin(G,({types:Y})=>({visitor:{JSXOpeningElement(U,Q){const J=U.node;if(J.name&&J.name.type==="JSXMemberExpression")return;for(let V=0;V<J.attributes.length;V++){const L=J.attributes[V];if(L.type==="JSXAttribute"&&L.name&&L.name.name==="data-om-id")return}const W=Q.file&&Q.file.opts&&Q.file.opts.filename||"?";const Z=J.loc&&J.loc.start;const z=`jsx:${W}:${J.start??0}:${Z?Z.line:0}:${Z?Z.column+1:0}`;J.attributes.push(Y.jsxAttribute(Y.jsxIdentifier("data-om-id"),Y.stringLiteral(z)))}}}))}const k="om-text-extract";let A=false;if(x&&H&&H.registerPlugin&&!(H.availablePlugins&&H.availablePlugins[k])){const Y=window.React;if(Y&&Y.useSyncExternalStore&&Y.createElement){A=true;const U={};const Q=new Set;let J=0;window.__omTextO=U;window.__omTextSet=(z)=>{for(const V in z){const L=z[V];if(L==null)delete U[V];else U[V]=L}J++;Q.forEach((V)=>V())};const W=(z)=>{Q.add(z);return()=>Q.delete(z)};const Z=()=>J;window.__OmT=function z(V){Y.useSyncExternalStore(W,Z,Z);return Y.createElement("span",{"data-om-text":V.i,className:"__om-t"},V.i in U?U[V.i]:V.children)};H.registerPlugin(k,({types:z})=>{const V={style:1,script:1,noscript:1,textarea:1,title:1,option:1,text:1,tspan:1,textPath:1};const L={placeholder:1,alt:1,title:1,label:1,"aria-label":1,"aria-description":1,"aria-placeholder":1};const _=($,C)=>z.logicalExpression("??",z.memberExpression(z.logicalExpression("||",z.memberExpression(z.identifier("window"),z.identifier("__omTextO")),z.objectExpression([])),z.stringLiteral($),true),C);const E=($)=>$.file&&$.file.opts&&$.file.opts.filename||"?";const B=($)=>$.file&&$.file.code||"";const b=($,C)=>{const X=(F)=>F&&F.start!=null&&F.end!=null&&(F.type==="StringLiteral"||F.type==="TemplateLiteral"&&F.expressions.length===0)?[F.start,F.end]:null;const N=X(C);if(N)return N;if(C&&C.type==="Identifier"){const F=$.scope.getBinding(C.name);if(F&&F.constant&&F.path.node.type==="VariableDeclarator"){return X(F.path.node.init)}}return null};const M=($,C,X)=>{const N=$.node;let F=false;const w=(K,q)=>{F=true;return z.jsxElement(z.jsxOpeningElement(z.jsxIdentifier("__OmT"),[z.jsxAttribute(z.jsxIdentifier("i"),z.stringLiteral(K))],false),z.jsxClosingElement(z.jsxIdentifier("__OmT")),[q],false)};const D=N.children.map((K)=>{if(K.type==="JSXText"){if(K.start==null||K.end==null)return K;const q=X.slice(K.start,K.end);const R=q.length-q.trimStart().length;const m=q.length-q.trimEnd().length;if(R+m>=q.length)return K;return w(`txt:${C}:${K.start+R}:${K.end-m}`,K)}if(K.type==="JSXExpressionContainer"){const q=b($,K.expression);if(q)return w(`str:${C}:${q[0]}:${q[1]}`,K)}return K});if(F)N.children=D};return{visitor:{JSXOpeningElement($,C){const X=$.node;const N=E(C);const F={};for(let w=0;w<X.attributes.length;w++){const D=X.attributes[w];if(D.type!=="JSXAttribute"||!D.name)continue;const K=D.name.name;if(!L[K])continue;if(!D.value||D.value.type!=="StringLiteral")continue;if(D.value.start==null||D.value.end==null)continue;const q=`txt:${N}:${D.value.start}:${D.value.end}`;F[K]=q;D.value=z.jsxExpressionContainer(_(q,z.stringLiteral(D.value.value)))}if(Object.keys(F).length){X.attributes.push(z.jsxAttribute(z.jsxIdentifier("data-om-text-attrs"),z.stringLiteral(JSON.stringify(F))))}},JSXElement($,C){const X=$.node.openingElement;const N=X&&X.name&&X.name.name;if(N==="__OmT")return;if(typeof N==="string"&&V[N])return;M($,E(C),B(C))},JSXFragment($,C){M($,E(C),B(C))}}}})}}const u=A?["transform-react-jsx-source",G,k]:["transform-react-jsx-source",G];document.querySelectorAll('script[type="text/babel"],script[type="text/jsx"]').forEach((Y,U)=>{const Q=Y.getAttribute("data-plugins")||"";const J=u.filter((W)=>Q.indexOf(W)<0);if(J.length){Y.setAttribute("data-plugins",Q?`${Q},${J.join(",")}`:J.join(","))}if(!Y.hasAttribute("data-filename")){Y.setAttribute("data-filename",Y.getAttribute("src")||`inline-${U}`)}})});var y=window.parent;if(y&&y!==window){const H=(Q,J)=>{try{y.postMessage({__omelette_log:true,type:Q,data:J},"*")}catch{}};["log","warn","error"].forEach((Q)=>{const J=console[Q];console[Q]=(...W)=>{const Z=W.map((z)=>{try{return typeof z==="object"?JSON.stringify(z):String(z)}catch{try{return String(z)}catch{return"[unstringifiable]"}}}).join(" ");H(Q,Z);J.apply(console,W)}});window.addEventListener("error",(Q)=>{const J=Q.target;if(J&&J!==window&&J.tagName){const W=J.src||J.href||"";H("resource_error",`${J.tagName} failed to load: ${W}`)}else{H("error",`${Q.message||"Unknown error"} at ${Q.filename||"?"}:${Q.lineno||0}:${Q.colno||0}`)}},true);window.addEventListener("unhandledrejection",(Q)=>{const J=Q.reason;const W=J instanceof Error?`${J.message} ${J.stack}`:String(J);H("error",`Unhandled rejection: ${W}`)});const G=()=>{try{y.postMessage({type:"omelette:height",height:document.documentElement.scrollHeight},"*")}catch{}};if(document.readyState==="complete")G();else window.addEventListener("load",G);if(window.ResizeObserver)new ResizeObserver(G).observe(document.documentElement);const k={};let A=0;window.claude={complete(Q){return new Promise((J,W)=>{if(!j.length){W(new Error("claude.complete: no parent origin"));return}const Z=`c${++A}`;const z=()=>setTimeout(()=>{delete k[Z];W(new Error(`claude.complete: no data for ${S/1000}s`))},S);const V=z();k[Z]={resolve:J,reject:W,text:"",t:V,arm:z};try{for(const L of j){y.postMessage({__om_api:true,id:Z,body:Q},L)}}catch(L){clearTimeout(V);delete k[Z];W(L)}})}};const u={};let Y=0;window.omelette={writeFile:(Q,J)=>new Promise((W,Z)=>{if(!j.length){W();return}const z=`f${++Y}`;const V=setTimeout(()=>{delete u[z];W()},f);u[z]={resolve:W,reject:Z,t:V};try{for(const L of j){y.postMessage({__om_file:true,id:z,op:"write",path:Q,content:J},L)}}catch{clearTimeout(V);delete u[z];W()}})};const U=(Q)=>{try{return JSON.stringify(Q)}catch{return JSON.stringify(String(Q))}};window.addEventListener("message",(Q)=>{if(j.indexOf(Q.origin)<0)return;if(Q.source!==y)return;const J=Q.data;if(!J)return;if(J.type==="omelette-preview-refresh"){if(typeof J.token!=="string"||!/^[0-9a-f.-]+(\.(rc|pr-[0-9]+))?(\.[0-9]+\.[0-9a-f]{16})?$/.test(J.token))return;const z=Math.max(1,Math.floor((J.expiresAt||0)-Date.now()/1000));document.cookie="__Host-omelette-preview="+J.token+"; Path=/; Secure; SameSite=None; Partitioned; Max-Age="+z;return}if(J.__om_file_r){const z=u[J.id];if(!z)return;clearTimeout(z.t);delete u[J.id];if(J.ok)z.resolve();else z.reject(new Error(J.error||"write failed"));return}if(J.__om_api_r){const z=k[J.id];if(!z)return;if(J.error!=null){clearTimeout(z.t);delete k[J.id];z.reject(new Error(J.error));return}if(J.chunk!=null){clearTimeout(z.t);z.t=z.arm();z.text+=J.chunk;return}if(J.done){clearTimeout(z.t);delete k[J.id];z.resolve(J.text!=null?J.text:z.text);return}return}if(!J.__om_eval)return;const W=J;const Z=(z)=>{Q.source.postMessage({...z,__om_eval_r:1,id:W.id},Q.origin)};try{const z=(0,eval)(W.code);if(z&&typeof z.then==="function"){z.then((V)=>Z({ok:1,v:U(V)}),(V)=>Z({ok:0,e:String(V)}))}else{Z({ok:1,v:U(z)})}}catch(z){Z({ok:0,e:String(z)})}})}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>finplan — Дашборд</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#F3F1EC;
+  --bg-soft:#EEEBE4;
+  --card:#FFFFFF;
+  --card-2:#F5F3EE;
+  --ink:#171511;
+  --ink-2:#544F46;
+  --ink-3:#928B7E;
+  --line:#E6E2D9;
+  --line-2:#EEEAE2;
+  --accent:#BC6443;
+  --accent-2:#A4502F;
+  --accent-soft:#F6E7DD;
+  --green:#2E8456;
+  --green-soft:#E1EFE6;
+  --amber:#AE7E26;
+  --amber-soft:#F4ECD6;
+  --red:#B23A2E;
+  --red-soft:#F1DED9;
+  --chart-grid:#EBE7DE;
+  --chart-axis:#A69F90;
+  --shadow:0 1px 1px rgba(40,30,15,.04), 0 4px 16px -10px rgba(40,30,15,.10);
+  --shadow-sm:0 1px 1px rgba(40,30,15,.05);
+  --radius:11px;
+  --radius-sm:8px;
+}
+[data-theme="dark"]{
+  --bg:#151310;
+  --bg-soft:#1A1814;
+  --card:#201E19;
+  --card-2:#27241F;
+  --ink:#F1EEE6;
+  --ink-2:#ABA597;
+  --ink-3:#797264;
+  --line:#322E27;
+  --line-2:#28251F;
+  --accent:#D98B66;
+  --accent-2:#E29C7B;
+  --accent-soft:#33231A;
+  --green:#5DB17C;
+  --green-soft:#1B2C21;
+  --amber:#CE9F52;
+  --amber-soft:#30270F;
+  --red:#CF6E60;
+  --red-soft:#331E19;
+  --chart-grid:#2A2720;
+  --chart-axis:#6B6456;
+  --shadow:0 1px 1px rgba(0,0,0,.34), 0 8px 22px -14px rgba(0,0,0,.6);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+  background:var(--bg);
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  font-feature-settings:"ss01","cv01";
+  letter-spacing:-.005em;
+  transition:background .35s ease,color .35s ease;
+}
+.tnum{font-variant-numeric:tabular-nums}
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+
+/* ---------- sidebar ---------- */
+.sidebar{
+  border-right:1px solid var(--line);
+  background:var(--bg-soft);
+  padding:20px 14px;
+  display:flex;flex-direction:column;gap:3px;
+  position:sticky;top:0;height:100vh;
+}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 20px}
+.brand-mark{
+  width:29px;height:29px;border-radius:8px;
+  background:linear-gradient(155deg,var(--accent),var(--accent-2));
+  display:grid;place-items:center;flex:none;box-shadow:var(--shadow-sm);
+}
+.brand-mark svg{width:16px;height:16px;color:#fff}
+.brand-name{font-weight:600;font-size:16px;letter-spacing:-.02em}
+.nav-item{
+  display:flex;align-items:center;gap:11px;
+  padding:8px 10px;border-radius:8px;
+  color:var(--ink-2);font-weight:500;font-size:14px;
+  text-decoration:none;cursor:pointer;border:1px solid transparent;
+  transition:background .15s ease,color .15s ease;
+}
+.nav-item svg{width:18px;height:18px;flex:none;opacity:.8}
+.nav-item:hover{background:var(--card-2);color:var(--ink)}
+.nav-item.active{background:var(--card);color:var(--ink);font-weight:550;box-shadow:var(--shadow-sm);border-color:var(--line)}
+.nav-item.active svg{color:var(--accent);opacity:1}
+.nav-spacer{flex:1}
+.user{
+  display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:10px;margin-top:6px;
+  border:1px solid var(--line);background:var(--card);
+}
+.avatar{width:33px;height:33px;border-radius:9px;flex:none;display:grid;place-items:center;
+  background:linear-gradient(150deg,var(--accent),var(--accent-2));color:#fff;font-weight:600;font-size:13px}
+.user-info{min-width:0}
+.user-name{font-weight:550;font-size:13.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- main ---------- */
+.main{overflow-y:auto;height:100vh}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 36px 60px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:22px}
+.greet h2{font-size:19px;font-weight:600;letter-spacing:-.025em}
+.greet p{color:var(--ink-3);font-size:13px;margin-top:1px}
+.top-actions{display:flex;align-items:center;gap:9px}
+.icon-btn{
+  width:37px;height:37px;border-radius:9px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2);display:grid;place-items:center;cursor:pointer;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.icon-btn:hover{color:var(--ink);border-color:var(--ink-3)}
+.icon-btn svg{width:18px;height:18px}
+.btn{
+  display:inline-flex;align-items:center;gap:7px;height:37px;padding:0 14px;border-radius:9px;
+  font-family:inherit;font-size:13.5px;font-weight:550;cursor:pointer;border:1px solid var(--accent);
+  background:var(--accent);color:#fff;transition:.15s;
+}
+.btn svg{width:16px;height:16px}
+.btn:hover{filter:brightness(1.05)}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+
+/* ---------- status strip ---------- */
+.strip{display:grid;grid-template-columns:296px 1fr;align-items:stretch;margin-bottom:16px;overflow:hidden}
+.strip-lead{padding:20px 24px;display:flex;flex-direction:column;gap:12px;justify-content:center;position:relative}
+.strip-lead::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:3px;background:var(--green)}
+.strip-lead.warn::before{background:var(--amber)}
+.state-row{display:inline-flex;align-items:center;gap:7px;padding:4px 11px 4px 8px;border-radius:999px;background:var(--green-soft);width:fit-content;white-space:nowrap}
+.state-dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.state-text{font-size:12px;font-weight:600;color:var(--green);letter-spacing:.01em}
+.strip-lead.warn .state-row{background:var(--amber-soft)}
+.strip-lead.warn .state-dot{background:var(--amber)}
+.strip-lead.warn .state-text{color:var(--amber)}
+.lead-eyebrow{font-size:11.5px;font-weight:600;color:var(--ink-3);letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px}
+.lead-num{display:flex;align-items:baseline;gap:8px;font-variant-numeric:tabular-nums;white-space:nowrap;margin-top:2px}
+.lead-num .big{font-size:40px;line-height:1;letter-spacing:-.035em;font-weight:600;color:var(--green)}
+.strip-lead.warn .lead-num .big{color:var(--amber)}
+.lead-num .unit{font-size:18px;font-weight:550;color:var(--ink-2);letter-spacing:-.02em}
+.lead-sub{margin-top:8px;font-size:13.5px;color:var(--ink-2)}
+.lead-sub b{color:var(--ink);font-weight:600}
+.strip-figs{display:grid;grid-template-columns:repeat(4,1fr);border-left:1px solid var(--line)}
+.fig{padding:18px 20px;display:flex;flex-direction:column;gap:4px;border-left:1px solid var(--line-2);justify-content:center}
+.fig:first-child{border-left:none}
+.fig-label{font-size:12px;color:var(--ink-3);font-weight:500}
+.fig-val{font-size:22px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.fig-val.green{color:var(--green)}
+.fig-note{font-size:11.5px;color:var(--ink-3)}
+
+/* ---------- chart ---------- */
+.chart-card{padding:22px 24px 16px;margin-bottom:16px}
+.chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:8px;flex-wrap:wrap}
+.chart-head h3{font-size:15.5px;font-weight:600;letter-spacing:-.02em}
+.chart-head .sub{color:var(--ink-3);font-size:12.5px;margin-top:2px}
+.chart-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.seg{display:flex;background:var(--card-2);border:1px solid var(--line);border-radius:9px;padding:3px;gap:1px}
+.seg button{border:none;background:none;font-family:inherit;font-size:12.5px;font-weight:550;color:var(--ink-3);
+  padding:5px 11px;border-radius:6px;cursor:pointer;transition:.15s;white-space:nowrap}
+.seg button:hover{color:var(--ink-2)}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow-sm)}
+.select-wrap{position:relative;display:inline-flex;align-items:center}
+.period-select{
+  appearance:none;-webkit-appearance:none;font-family:inherit;
+  font-size:12.5px;font-weight:550;color:var(--ink);letter-spacing:-.005em;
+  background:var(--card);border:1px solid var(--line);border-radius:9px;
+  padding:0 32px 0 13px;height:33px;cursor:pointer;box-shadow:var(--shadow-sm);
+  transition:border-color .15s;
+}
+.period-select:hover{border-color:var(--ink-3)}
+.period-select:focus{outline:none;border-color:var(--accent)}
+.select-wrap>svg{position:absolute;right:10px;width:15px;height:15px;color:var(--ink-3);pointer-events:none}
+.chart-plot{position:relative;margin-top:6px}
+.chart-plot svg{display:block;width:100%;height:auto}
+.ctip{
+  position:absolute;pointer-events:none;opacity:0;transform:translate(-50%,-120%);
+  background:var(--ink);color:var(--bg);padding:7px 10px;border-radius:8px;font-size:12.5px;
+  white-space:nowrap;box-shadow:0 6px 18px -6px rgba(0,0,0,.4);transition:opacity .12s;z-index:3;line-height:1.4;
+}
+.ctip b{font-weight:600}
+.ctip .tl{color:color-mix(in oklab,var(--bg),transparent 38%);font-size:11px}
+.chart-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px;flex-wrap:wrap}
+.legend{display:flex;gap:15px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-2);white-space:nowrap}
+.legend i{width:16px;height:0;border-top:2px solid currentColor;border-radius:0;flex:none}
+.legend .sw-base{color:var(--ink)}
+.legend .sw-opt{color:var(--green);border-top-style:dashed}
+.legend .sw-cau{color:var(--red);border-top-style:dashed}
+.legend .sw-cush{color:var(--amber);border-top-style:dashed}
+.foot-note{font-size:12px;color:var(--ink-3)}
+
+/* ---------- insights ---------- */
+.insights{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.ins{padding:17px 19px}
+.ins-head{display:flex;align-items:center;gap:10px;margin-bottom:13px}
+.ins-ic{width:30px;height:30px;border-radius:8px;flex:none;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.ins-ic svg{width:16px;height:16px}
+.ins-ic.green{background:var(--green-soft);color:var(--green)}
+.ins-label{font-size:13px;font-weight:550;color:var(--ink-2)}
+.ins-val{font-size:23px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums;line-height:1.05}
+.ins-val.green{color:var(--green)}
+.ins-strong{margin-top:7px;font-size:13px;color:var(--ink);font-weight:550}
+.ins-note{margin-top:4px;font-size:12px;color:var(--ink-3);line-height:1.45}
+
+/* ---------- panels ---------- */
+.panels{display:grid;grid-template-columns:1fr 1.12fr;gap:16px}
+.panel{padding:19px 21px}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.panel-head h3{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.panel-head .tot{font-size:12.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+
+.acct{display:flex;align-items:center;gap:13px;padding:10px 0;border-bottom:1px solid var(--line-2)}
+.acct:last-child{border-bottom:none}
+.acct-ic{width:33px;height:33px;border-radius:9px;flex:none;display:grid;place-items:center;font-size:12px;font-weight:600;
+  background:var(--card-2);color:var(--ink-2);border:1px solid var(--line)}
+.acct-main{flex:1;min-width:0}
+.acct-name{font-size:13.5px;font-weight:550}
+.acct-sub{font-size:11.5px;color:var(--ink-3)}
+.acct-bar{height:4px;border-radius:3px;background:var(--line-2);margin-top:7px;overflow:hidden}
+.acct-bar i{display:block;height:100%;border-radius:3px;background:var(--accent);opacity:.5}
+.acct-amt{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;flex:none;white-space:nowrap}
+
+.exp{display:grid;grid-template-columns:130px 1fr auto;align-items:center;gap:12px;padding:7px 0}
+.exp-name{font-size:13px;color:var(--ink-2)}
+.exp-track{height:8px;border-radius:5px;background:var(--card-2);overflow:hidden}
+.exp-track i{display:block;height:100%;border-radius:5px}
+.exp-amt{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;min-width:52px;text-align:right;white-space:nowrap}
+
+@media(max-width:1100px){
+  .strip{grid-template-columns:1fr}
+  .strip-figs{border-left:none;border-top:1px solid var(--line)}
+  .insights{grid-template-columns:1fr}
+}
+@media(max-width:920px){
+  .strip-figs{grid-template-columns:repeat(2,1fr)}
+  .fig:nth-child(odd){border-left:none}
+  .panels{grid-template-columns:1fr}
+}
+@media(max-width:860px){
+  .app{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .wrap{padding:20px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ===== sidebar ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16 L9 10 L13 13 L20 5"/><path d="M4 20h16"/></svg>
+      </span>
+      <span class="brand-name">finplan</span>
+    </div>
+
+    <a class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="11" width="8" height="10" rx="2"/><rect x="3" y="14" width="8" height="7" rx="2"/></svg>
+      Дашборд
+    </a>
+    <a class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.3" fill="currentColor" stroke="none"/></svg>
+      Баланс
+    </a>
+    <a class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7 L10 13 L14 9 L20 15"/><path d="M15 15h5v-5"/></svg>
+      Доходы
+    </a>
+    <a class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17 L10 11 L14 15 L20 9"/><path d="M15 9h5v5"/></svg>
+      Расходы
+    </a>
+    <a class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4h11l-2.2 4L17 12H6"/></svg>
+      Мечты
+    </a>
+    <a class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+      Ещё
+    </a>
+
+    <div class="nav-spacer"></div>
+
+    <a class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M17 7h3"/><circle cx="15" cy="7" r="2.1"/><path d="M4 17h3"/><path d="M11 17h9"/><circle cx="9" cy="17" r="2.1"/></svg>
+      Настройки
+    </a>
+
+    <div class="user">
+      <span class="avatar">АК</span>
+      <div class="user-info">
+        <div class="user-name">Артём Кравцов</div>
+        <div class="user-role">Indie · AI Builder</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== main ===== -->
+  <main class="main">
+    <div class="wrap">
+      <div class="topbar">
+        <div class="greet">
+          <h2>С возвращением, Артём</h2>
+          <p id="today-line">Прогноз пересчитан сегодня</p>
+        </div>
+        <div class="top-actions">
+          <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Операция</button>
+          <button class="icon-btn" id="theme-btn" aria-label="Сменить тему"></button>
+        </div>
+      </div>
+
+      <!-- status strip -->
+      <section class="strip card">
+        <div class="strip-lead" id="strip-lead">
+          <span class="state-row"><span class="state-dot"></span><span class="state-text" id="state-text">Отличный запас</span></span>
+          <div>
+            <div class="lead-eyebrow">Запас хода</div>
+            <div class="lead-num"><span class="big" id="lead-big">≈ 14</span><span class="unit">мес</span></div>
+            <div class="lead-sub" id="lead-sub">денег хватает до <b>августа 2027</b></div>
+          </div>
+        </div>
+        <div class="strip-figs">
+          <div class="fig"><span class="fig-label">Баланс</span><span class="fig-val tnum">$18 400</span><span class="fig-note">Wise · USDT · карта</span></div>
+          <div class="fig"><span class="fig-label">Доходы / мес</span><span class="fig-val tnum" id="fig-income">$6 200</span><span class="fig-note">в среднем за 6 мес</span></div>
+          <div class="fig"><span class="fig-label">Расходы / мес</span><span class="fig-val tnum">$4 100</span><span class="fig-note">стабильные</span></div>
+          <div class="fig"><span class="fig-label">Свободно / мес</span><span class="fig-val green tnum" id="fig-free">+$2 100</span><span class="fig-note">чистый поток</span></div>
+        </div>
+      </section>
+
+      <!-- chart -->
+      <section class="chart-card card">
+        <div class="chart-head">
+          <div>
+            <h3>Прогноз баланса</h3>
+            <div class="sub" id="chart-sub">Следующие 12 месяцев · с учётом нерегулярных доходов</div>
+          </div>
+          <div class="chart-tools">
+            <div class="seg" id="scenario">
+              <button data-s="base" class="on">Базовый</button>
+              <button data-s="optimistic">Оптимистичный</button>
+              <button data-s="cautious">Осторожный</button>
+            </div>
+            <div class="select-wrap">
+              <select id="period" class="period-select" aria-label="Период прогноза">
+                <option value="14">2 недели</option>
+                <option value="31">1 месяц</option>
+                <option value="92">3 месяца</option>
+                <option value="183">6 месяцев</option>
+                <option value="365">1 год</option>
+              </select>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="chart-plot">
+          <svg id="chart" viewBox="0 0 960 320" preserveAspectRatio="none"></svg>
+          <div class="ctip" id="ctip"></div>
+        </div>
+        <div class="chart-foot">
+          <div class="legend">
+            <span><i class="sw-base"></i>базовый</span>
+            <span><i class="sw-opt"></i>оптимистичный</span>
+            <span><i class="sw-cau"></i>осторожный</span>
+            <span><i class="sw-cush"></i>подушка</span>
+          </div>
+          <div class="foot-note" id="foot-note">Сценарий: базовый прогноз</div>
+        </div>
+      </section>
+
+      <!-- insights -->
+      <section class="insights">
+        <div class="ins card">
+          <div class="ins-head">
+            <span class="ins-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v9"/><path d="M8 9l4 4 4-4"/><path d="M5 19h14"/></svg></span>
+            <span class="ins-label">Ожидается в этом месяце</span>
+          </div>
+          <div class="ins-val tnum" id="ins-expect">$5 400</div>
+          <div class="ins-note" id="ins-expect-note">Acme $3 800 · MRR $620 · консалтинг $1 000</div>
+        </div>
+        <div class="ins card">
+          <div class="ins-head">
+            <span class="ins-ic green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M16.5 7.5C16.5 5.6 14.5 4.5 12 4.5S7.5 5.6 7.5 7.5 9.5 10.5 12 11s4.5 1.5 4.5 3.5S14.5 18 12 18s-4.5-1.1-4.5-3"/></svg></span>
+            <span class="ins-label">Можно потратить сверх плана</span>
+          </div>
+          <div class="ins-val green tnum" id="ins-safe">+$1 200</div>
+          <div class="ins-note">В этом месяце — без риска для срока запаса.</div>
+        </div>
+        <div class="ins card">
+          <div class="ins-head">
+            <span class="ins-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/></svg></span>
+            <span class="ins-label">Ближайшее крупное списание</span>
+          </div>
+          <div class="ins-val tnum">$1 800</div>
+          <div class="ins-strong" id="ins-due">Аренда · через 5 дней</div>
+          <div class="ins-note" id="ins-due-2">Затем API $900 · 26 июня</div>
+        </div>
+      </section>
+
+      <!-- panels -->
+      <section class="panels">
+        <div class="panel card">
+          <div class="panel-head"><h3>Счета</h3><span class="tot">$18 400 всего</span></div>
+          <div class="acct">
+            <span class="acct-ic">W</span>
+            <div class="acct-main">
+              <div class="acct-name">Wise · USD</div>
+              <div class="acct-sub">Основной счёт для гонораров</div>
+              <div class="acct-bar"><i style="width:50%"></i></div>
+            </div>
+            <span class="acct-amt">$9 200</span>
+          </div>
+          <div class="acct">
+            <span class="acct-ic">₮</span>
+            <div class="acct-main">
+              <div class="acct-name">USDT · TRC-20</div>
+              <div class="acct-sub">Платежи от части клиентов</div>
+              <div class="acct-bar"><i style="width:37%"></i></div>
+            </div>
+            <span class="acct-amt">$6 800</span>
+          </div>
+          <div class="acct">
+            <span class="acct-ic">К</span>
+            <div class="acct-main">
+              <div class="acct-name">Карта · ₽</div>
+              <div class="acct-sub">Повседневные траты, ≈ ₽228 000</div>
+              <div class="acct-bar"><i style="width:13%"></i></div>
+            </div>
+            <span class="acct-amt">$2 400</span>
+          </div>
+        </div>
+
+        <div class="panel card">
+          <div class="panel-head"><h3>Куда уходят деньги</h3><span class="tot">$4 100 в месяц</span></div>
+          <div id="exp-list"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ---------- theme ---------- */
+const sun='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>';
+const moon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.6 6.6 0 0 0 21 12.8Z"/></svg>';
+const root=document.documentElement, tbtn=document.getElementById('theme-btn');
+function setTheme(t){root.setAttribute('data-theme',t);tbtn.innerHTML=t==='dark'?sun:moon;try{localStorage.setItem('finplan-theme',t)}catch(e){}setTimeout(render,30)}
+let saved='light';try{saved=localStorage.getItem('finplan-theme')||'light'}catch(e){}
+setTheme(saved);
+tbtn.addEventListener('click',()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark'));
+
+/* ---------- expenses ---------- */
+const expenses=[
+  {name:'Аренда',v:1800,c:'var(--accent)'},
+  {name:'API · Anthropic / OpenAI',v:900,c:'var(--accent)'},
+  {name:'Продукты',v:700,c:'var(--accent)'},
+  {name:'Прочее',v:300,c:'var(--ink-3)'},
+  {name:'VPS и облако',v:220,c:'var(--ink-3)'},
+  {name:'Подписки',v:180,c:'var(--ink-3)'},
+];
+const emax=Math.max(...expenses.map(e=>e.v));
+document.getElementById('exp-list').innerHTML=expenses.map(e=>
+  `<div class="exp"><span class="exp-name">${e.name}</span><span class="exp-track"><i style="width:${(e.v/emax*100).toFixed(0)}%;background:${e.c};opacity:.5"></i></span><span class="exp-amt tnum">$${e.v.toLocaleString('ru-RU').replace(/\u00A0/g,'\u202F')}</span></div>`
+).join('');
+
+/* ---------- forecast model ---------- */
+const START=new Date(2026,5,14); // 14 июня 2026 — «сегодня»
+// end-of-month anchor balances (USD), month 0 = сегодня
+const anchor={
+  base:      [18400,18800,17600,18200,16600,17000,15200,15600,13800,14000,12000,12200,10200,7400,3000],
+  optimistic:[18400,19200,20000,20400,21400,21800,22800,23200,24200,24600,25600,26000,27000,27600,28600],
+  cautious:  [18400,16800,15200,13400,11800,10000,8200,6200,4200,2000,-200,-2400,-4600,-6800,-9000]
+};
+const scenMeta={
+  base:{income:'$6 200', free:'+$2 100', label:'базовый прогноз', expect:'$5 400', expectNote:'Acme $3 800 · MRR $620 · консалтинг $1 000', safe:'+$1 200'},
+  optimistic:{income:'$7 500', free:'+$3 400', label:'оптимистичный сценарий', expect:'$7 200', expectNote:'Acme $3 800 · Nimbus $2 400 · MRR $620 · консалтинг $400', safe:'+$2 300'},
+  cautious:{income:'$4 600', free:'−$900', label:'осторожный сценарий', expect:'$3 200', expectNote:'Acme $2 200 · MRR $620 · консалтинг $400', safe:'+$200'}
+};
+const MON_NOM=['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+const MON_GEN=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const MON_SHORT=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+const EXPENSE_M=4100;
+
+// smooth Catmull-Rom interpolation through monthly anchors -> calm daily curve
+function catmull(p0,p1,p2,p3,t){
+  const t2=t*t,t3=t2*t;
+  return 0.5*((2*p1)+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t2+(-p0+3*p1-3*p2+p3)*t3);
+}
+function buildDaily(sc){
+  const a=anchor[sc];
+  const A=i=>a[Math.max(0,Math.min(a.length-1,i))];
+  const ph=sc==='base'?0:sc==='optimistic'?2.1:4.2;
+  const segs=a.length-1;const pts=[];let g=0;
+  for(let m=0;m<segs;m++){
+    const mStart=new Date(START.getFullYear(),START.getMonth()+m,START.getDate());
+    const mEnd=new Date(START.getFullYear(),START.getMonth()+m+1,START.getDate());
+    const D=Math.round((mEnd-mStart)/86400000);
+    for(let d=0;d<D;d++){
+      const t=d/D;
+      let v=catmull(A(m-1),A(m),A(m+1),A(m+2),t);
+      if(!(m===0&&d===0)) v+=v*(0.015*Math.sin(g*0.21+ph)+0.009*Math.sin(g*0.085+ph*1.7)); // gentle irregularity
+      const date=new Date(mStart);date.setDate(mStart.getDate()+d);
+      pts.push({date,v});g++;
+    }
+  }
+  const endDate=new Date(START.getFullYear(),START.getMonth()+segs,START.getDate());
+  pts.push({date:endDate,v:A(segs)});
+  return pts;
+}
+const fullDaily={base:buildDaily('base'),optimistic:buildDaily('optimistic'),cautious:buildDaily('cautious')};
+
+function runwayInfo(sc){
+  const pts=fullDaily[sc];
+  const idx=pts.findIndex(p=>p.v<4000);
+  if(idx<0)return{big:true,months:Math.round((pts.length-1)/30.44)};
+  return{big:false,months:Math.max(1,Math.round(idx/30.44)),date:pts[idx].date};
+}
+
+let scenario='base', periodDays=365;
+try{scenario=localStorage.getItem('finplan-scenario')||'base';periodDays=+localStorage.getItem('finplan-period')||365;}catch(e){}
+
+const periodLabel={14:'2 недели',31:'месяц',92:'3 месяца',183:'6 месяцев',365:'12 месяцев'};
+
+function updatePanels(){
+  const meta=scenMeta[scenario];
+  document.getElementById('fig-income').textContent=meta.income;
+  const ff=document.getElementById('fig-free');
+  ff.textContent=meta.free;
+  const neg=meta.free.indexOf('−')===0;
+  ff.classList.toggle('green',!neg);
+  ff.style.color=neg?'var(--red)':'';
+  document.getElementById('ins-expect').textContent=meta.expect;
+  document.getElementById('ins-expect-note').textContent=meta.expectNote;
+  document.getElementById('ins-safe').textContent=meta.safe;
+  document.getElementById('foot-note').textContent='Сценарий: '+meta.label;
+
+  const rw=runwayInfo(scenario);
+  const lead=document.getElementById('strip-lead');
+  const big=document.getElementById('lead-big'),sub=document.getElementById('lead-sub'),st=document.getElementById('state-text');
+  if(rw.big){
+    lead.className='strip-lead';
+    big.textContent='> '+rw.months;st.textContent='Большой запас';
+    sub.innerHTML='денег хватает <b>за горизонт прогноза</b>';
+  }else{
+    const ok=rw.months>=12;
+    lead.className='strip-lead'+(ok?'':' warn');
+    big.textContent='≈ '+rw.months;
+    st.textContent=rw.months>=14?'Отличный запас':ok?'Хороший запас':'Запас тоньше';
+    sub.innerHTML='денег хватает до <b>'+MON_GEN[rw.date.getMonth()]+' '+rw.date.getFullYear()+'</b>';
+  }
+}
+
+/* ---------- chart ---------- */
+const svg=document.getElementById('chart');
+const ctip=document.getElementById('ctip');
+const cv=n=>getComputedStyle(root).getPropertyValue(n).trim();
+const X0=58,X1=940,Y0=24,Y1=268;
+
+function smooth(pts){
+  if(pts.length<2)return'';
+  let d=`M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||pts[i+1];
+    const c1x=p1[0]+(p2[0]-p0[0])/6,c1y=p1[1]+(p2[1]-p0[1])/6;
+    const c2x=p2[0]-(p3[0]-p1[0])/6,c2y=p2[1]-(p3[1]-p1[1])/6;
+    d+=`C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+function niceTicks(min,max){
+  const range=(max-min)||1;const raw=range/4;
+  const mag=Math.pow(10,Math.floor(Math.log10(raw)));const norm=raw/mag;
+  const step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
+  const lo=Math.floor(min/step)*step,hi=Math.ceil(max/step)*step;
+  const ticks=[];for(let v=lo;v<=hi+1;v+=step)ticks.push(Math.round(v));
+  return{ticks,lo,hi};
+}
+function fmtK(v){
+  if(v===0)return'$0';const neg=v<0,a=Math.abs(v);
+  let s;if(a>=1000){const k=a/1000;s=(Number.isInteger(k)?k:k.toFixed(1))+'k';}else s=Math.round(a);
+  return(neg?'−$':'$')+s;
+}
+const money=v=>(v<0?'−$':'$')+Math.round(Math.abs(v)).toLocaleString('ru-RU').replace(/\u00A0/g,'\u202F');
+
+let VMIN=0,VMAX=1,N=1,visG=[];
+const mapX=i=>X0+(i/(N-1))*(X1-X0);
+const mapY=v=>Y0+((VMAX-v)/(VMAX-VMIN))*(Y1-Y0);
+
+function render(){
+  const sliceN=Math.min(fullDaily.base.length,periodDays+1);
+  const series={
+    base:fullDaily.base.slice(0,sliceN),
+    optimistic:fullDaily.optimistic.slice(0,sliceN),
+    cautious:fullDaily.cautious.slice(0,sliceN)
+  };
+  const vis=series[scenario];
+  N=vis.length;visG=vis;
+  const CUSHION=4000;
+
+  // scale across all three series + cushion threshold
+  let mn=Infinity,mx=-Infinity;
+  ['base','optimistic','cautious'].forEach(s=>series[s].forEach(p=>{if(p.v<mn)mn=p.v;if(p.v>mx)mx=p.v;}));
+  mn=Math.min(mn,CUSHION);mx=Math.max(mx,CUSHION);
+  const range=(mx-mn)||1000;mn-=range*0.14;mx+=range*0.12;
+  if(mn>0&&mn<2500)mn=0;
+  const nt=niceTicks(mn,mx);VMIN=nt.lo;VMAX=nt.hi;
+
+  const grid=cv('--chart-grid'),axis=cv('--chart-axis'),green=cv('--green'),amber=cv('--amber'),red=cv('--red'),ink=cv('--ink'),accent=cv('--accent'),cardc=cv('--card');
+  const toPts=arr=>arr.map((p,i)=>[mapX(i),mapY(p.v)]);
+  const ptsBy={base:toPts(series.base),optimistic:toPts(series.optimistic),cautious:toPts(series.cautious)};
+  const selPts=ptsBy[scenario];
+
+  // gridlines
+  let gl='';
+  nt.ticks.forEach(gv=>{
+    if(gv<VMIN-1||gv>VMAX+1)return;
+    const y=mapY(gv),zero=gv===0;
+    gl+=`<line x1="${X0}" y1="${y.toFixed(1)}" x2="${X1}" y2="${y.toFixed(1)}" stroke="${zero?axis:grid}" stroke-width="${zero?1.2:1}" opacity="${zero?0.8:0.5}"/>`;
+    gl+=`<text x="${X0-10}" y="${(y+4).toFixed(1)}" text-anchor="end" fill="${axis}" font-size="11.5" font-family="Geist" font-weight="500">${fmtK(gv)}</text>`;
+  });
+
+  // x ticks
+  const daily=periodDays<=45;const cnt=6;let xl='';const seen=new Set();
+  for(let k=0;k<=cnt;k++){
+    let i=Math.round(k/cnt*(N-1));if(i>=N)i=N-1;
+    const dt=vis[i].date;const key=daily?dt.getTime():dt.getFullYear()+'-'+dt.getMonth();
+    if(seen.has(key))continue;seen.add(key);
+    const t=daily?(dt.getDate()+' '+MON_SHORT[dt.getMonth()]):(MON_SHORT[dt.getMonth()]+' ’'+String(dt.getFullYear()).slice(2));
+    xl+=`<text x="${mapX(i).toFixed(1)}" y="${Y1+22}" text-anchor="middle" fill="${axis}" font-size="11.5" font-family="Geist">${t}</text>`;
+  }
+
+  // soft area under the selected (base) line
+  const selLine=smooth(selPts);
+  const selArea=selLine+`L${selPts[N-1][0].toFixed(1)},${Y1}L${selPts[0][0].toFixed(1)},${Y1}Z`;
+
+  // negative zone — worst case (осторожный) below zero, always shown so the minus risk is legible
+  const zeroY=mapY(0);let neg='';let negStart=-1;
+  {
+    const cau=series.cautious;let run=null;
+    for(let i=0;i<N;i++){
+      const below=cau[i].v<0;
+      if(below){if(!run){run=[];if(negStart<0)negStart=i;}run.push(i);}
+      if((!below||i===N-1)&&run&&run.length){
+        let d=`M${mapX(run[0]).toFixed(1)},${zeroY.toFixed(1)}`;
+        run.forEach(j=>{d+=`L${mapX(j).toFixed(1)},${mapY(cau[j].v).toFixed(1)}`;});
+        d+=`L${mapX(run[run.length-1]).toFixed(1)},${zeroY.toFixed(1)}Z`;
+        neg+=`<path d="${d}" fill="${red}" fill-opacity="0.20"/>`;
+        run=null;
+      }
+    }
+  }
+  let negLabel='';
+  if(negStart>1){
+    const dt=series.cautious[negStart].date;
+    const lx=Math.max(X0+70,mapX(negStart)-8);
+    negLabel=`<text x="${lx.toFixed(1)}" y="${(zeroY+17).toFixed(1)}" text-anchor="end" fill="${red}" font-size="11" font-weight="600" font-family="Geist">В минус · ${MON_NOM[dt.getMonth()]} ${dt.getFullYear()}</text>`;
+  }
+
+  // cushion reference line (safety threshold)
+  let cushion='';
+  if(CUSHION>=VMIN&&CUSHION<=VMAX){
+    const cy=mapY(CUSHION);
+    cushion=`<line x1="${X0}" y1="${cy.toFixed(1)}" x2="${X1}" y2="${cy.toFixed(1)}" stroke="${amber}" stroke-width="1.3" stroke-dasharray="6 6" opacity=".8"/>`+
+      `<text x="${X1}" y="${(cy-6).toFixed(1)}" text-anchor="end" fill="${amber}" font-size="11" font-weight="600" font-family="Geist">Подушка $4k</text>`;
+  }
+
+  // three projection lines — selected emphasized, drawn on top
+  const styleOf={base:{c:ink,dash:''},optimistic:{c:green,dash:'6 6'},cautious:{c:red,dash:'6 6'}};
+  const lineEl=(pts,c,dash,w,op)=>`<path d="${smooth(pts)}" fill="none" stroke="${c}" stroke-width="${w}" ${dash?`stroke-dasharray="${dash}"`:''} stroke-linecap="round" stroke-linejoin="round" opacity="${op}"/>`;
+  let lines='';
+  ['base','optimistic','cautious'].filter(s=>s!==scenario).forEach(s=>{const st=styleOf[s];lines+=lineEl(ptsBy[s],st.c,st.dash,1.7,0.6);});
+  {const st=styleOf[scenario];lines+=lineEl(selPts,st.c,st.dash,st.dash?2.4:2.8,1);}
+
+  // markers: today + thinnest month (selected)
+  let mk=`<line x1="${X0}" y1="${Y0}" x2="${X0}" y2="${Y1}" stroke="${axis}" stroke-width="1.2" stroke-dasharray="3 3" opacity=".5"/>`+
+    `<text x="${X0+6}" y="${Y0+11}" fill="${axis}" font-size="11" font-weight="600" font-family="Geist">Сегодня</text>`;
+  const ri=vis.findIndex(p=>p.v<CUSHION);
+  if(ri>1){
+    const rx=mapX(ri),ry=mapY(vis[ri].v),rcol=vis[ri].v<0?red:amber;
+    const rlbl=MON_NOM[vis[ri].date.getMonth()][0].toUpperCase()+MON_NOM[vis[ri].date.getMonth()].slice(1)+' '+vis[ri].date.getFullYear();
+    mk+=`<line x1="${rx.toFixed(1)}" y1="${ry.toFixed(1)}" x2="${rx.toFixed(1)}" y2="${Y1}" stroke="${rcol}" stroke-width="1.2" stroke-dasharray="3 3" opacity=".6"/>`+
+      `<circle cx="${rx.toFixed(1)}" cy="${ry.toFixed(1)}" r="4.5" fill="${cardc}" stroke="${rcol}" stroke-width="2"/>`+
+      `<text x="${rx.toFixed(1)}" y="${(ry-12).toFixed(1)}" text-anchor="middle" fill="${rcol}" font-size="11.5" font-weight="600" font-family="Geist">${rlbl}</text>`;
+  }
+
+  const last=selPts[N-1],lv=vis[N-1].v,ecol=lv<0?red:(lv<CUSHION?amber:green);
+  const dots=`<circle cx="${selPts[0][0].toFixed(1)}" cy="${selPts[0][1].toFixed(1)}" r="4.5" fill="${cardc}" stroke="${axis}" stroke-width="2.5"/>`+
+    `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5" fill="${ecol}"/>`;
+
+  svg.innerHTML=`
+    <defs>
+      <linearGradient id="area" x1="0" y1="${Y0}" x2="0" y2="${Y1}" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="${accent}" stop-opacity="0.15"/>
+        <stop offset="0.7" stop-color="${accent}" stop-opacity="0.03"/>
+        <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${gl}
+    <path d="${selArea}" fill="url(#area)"/>
+    ${neg}${cushion}${lines}${mk}${dots}${negLabel}${xl}
+    <line id="hl" x1="0" y1="${Y0}" x2="0" y2="${Y1}" stroke="${ink}" stroke-width="1" opacity="0"/>
+    <circle id="hc" r="5" fill="${cardc}" stroke="${ink}" stroke-width="2.5" opacity="0"/>
+    <rect x="${X0}" y="0" width="${X1-X0}" height="320" fill="transparent" id="hit"/>
+  `;
+  document.getElementById('chart-sub').textContent='Следующие '+periodLabel[periodDays]+' · базовый, оптимистичный и осторожный сценарии';
+  attachHover();
+}
+
+function attachHover(){
+  const hit=svg.querySelector('#hit'),hl=svg.querySelector('#hl'),hc=svg.querySelector('#hc');
+  hit.addEventListener('mousemove',e=>{
+    const r=svg.getBoundingClientRect();
+    const sx=(e.clientX-r.left)/r.width*960;
+    let i=Math.round((sx-X0)/((X1-X0)/(N-1)));i=Math.max(0,Math.min(N-1,i));
+    const px=mapX(i),py=mapY(visG[i].v);
+    hl.setAttribute('x1',px);hl.setAttribute('x2',px);hl.setAttribute('opacity','.16');
+    hc.setAttribute('cx',px);hc.setAttribute('cy',py);hc.setAttribute('opacity','1');
+    const col=visG[i].v<0?cv('--red'):(visG[i].v<4000?cv('--amber'):cv('--green'));
+    hc.setAttribute('stroke',col);
+    const dt=visG[i].date;
+    ctip.style.left=(px/960*r.width)+'px';
+    ctip.style.top=(py/320*r.height)+'px';
+    ctip.style.opacity='1';
+    ctip.innerHTML=`<span class="tl">${dt.getDate()} ${MON_GEN[dt.getMonth()]} ${dt.getFullYear()}</span><br><b>${money(visG[i].v)}</b>`;
+  });
+  hit.addEventListener('mouseleave',()=>{hl.setAttribute('opacity','0');hc.setAttribute('opacity','0');ctip.style.opacity='0';});
+}
+
+/* ---------- controls ---------- */
+function activate(group,attr,val){
+  [...document.getElementById(group).children].forEach(b=>b.classList.toggle('on',b.dataset[attr]==val));
+}
+activate('scenario','s',scenario);
+document.getElementById('period').value=String(periodDays);
+
+document.getElementById('period').addEventListener('change',e=>{
+  periodDays=+e.target.value;
+  try{localStorage.setItem('finplan-period',periodDays)}catch(e){}
+  render();
+});
+document.getElementById('scenario').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  activate('scenario','s',b.dataset.s);scenario=b.dataset.s;
+  try{localStorage.setItem('finplan-scenario',scenario)}catch(e){}
+  updatePanels();render();
+});
+
+/* ---------- nearest obligation dates ---------- */
+(function(){
+  const due=new Date(START);due.setDate(START.getDate()+5);
+  const due2=new Date(START);due2.setDate(START.getDate()+12);
+  document.getElementById('ins-due').textContent='Аренда · через 5 дней';
+  document.getElementById('ins-due-2').textContent='Затем API $900 · '+due2.getDate()+' '+MON_GEN[due2.getMonth()];
+  const days=['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+  document.getElementById('today-line').textContent=cap(days[START.getDay()])+', '+START.getDate()+' '+MON_GEN[START.getMonth()]+' · прогноз пересчитан сегодня';
+})();
+function cap(s){return s[0].toUpperCase()+s.slice(1);}
+
+updatePanels();
+render();
+</script>
+</body>
+</html>

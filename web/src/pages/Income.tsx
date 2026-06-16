@@ -652,7 +652,7 @@ export default function Income() {
         <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="mb-3 flex items-center gap-1.5 text-sm font-medium">
             По направлениям
-            <InfoHint>Направление — откуда пришли деньги (Фриланс, Консалтинг…). Настраивается в Настройках.</InfoHint>
+            <InfoHint>Направление — откуда пришли деньги (Acme, обучение…). Настраивается в Настройках.</InfoHint>
           </div>
           {Object.keys(data.by_direction).length ? (
             <div className="flex flex-col gap-3">

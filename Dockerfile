@@ -1,4 +1,4 @@
-# Stage 1: build the React SPA → web/dist
+# Stage 1: фронт (React + shadcn → web/dist)
 FROM node:22-slim AS webbuild
 WORKDIR /build
 COPY web/package*.json ./
@@ -6,7 +6,7 @@ RUN npm ci
 COPY web ./
 RUN npm run build
 
-# Stage 2: Python backend serving the API + the built SPA
+# Stage 2: бэкенд + статика
 FROM python:3.13-slim
 WORKDIR /srv/finplan
 

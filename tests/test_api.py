@@ -377,12 +377,12 @@ def test_wish_card_size_patch(client):
 
 def test_directions_crud(client):
     assert client.get("/api/directions").json() == []
-    r = client.post("/api/directions", json={"name": "Консалтинг"})
+    r = client.post("/api/directions", json={"name": "обучение AI-агентам"})
     assert r.status_code == 201
     did = r.json()["id"]
-    assert [d["name"] for d in client.get("/api/directions").json()] == ["Консалтинг"]
+    assert [d["name"] for d in client.get("/api/directions").json()] == ["обучение AI-агентам"]
     # дубликаты молча игнорируются (idempotent)
-    client.post("/api/directions", json={"name": "Консалтинг"})
+    client.post("/api/directions", json={"name": "обучение AI-агентам"})
     assert len(client.get("/api/directions").json()) == 1
     client.delete(f"/api/directions/{did}")
     assert client.get("/api/directions").json() == []
@@ -417,12 +417,12 @@ def test_inflow_accepts_direction_and_counterparty(client):
     r = client.post("/api/inflows", json={
         "name": "Поток июнь", "amount": 5000, "currency": "USD",
         "expected_date": TODAY.isoformat(),
-        "counterparty": "Client A", "direction": "Консалтинг",
+        "counterparty": "Atamura", "direction": "обучение AI-агентам",
     })
     assert r.status_code == 201
     row = client.get("/api/inflows").json()[0]
-    assert row["counterparty"] == "Client A"
-    assert row["direction"] == "Консалтинг"
+    assert row["counterparty"] == "Atamura"
+    assert row["direction"] == "обучение AI-агентам"
 
 
 def test_inflow_name_optional_derives_from_counterparty(client):
@@ -522,26 +522,26 @@ def test_inflow_delete_404(client):
 def test_income_quick_add_creates_received_inflow(client):
     r = client.post("/api/income", json={
         "amount": 3000, "currency": "USD",
-        "counterparty": "Client B", "direction": "Фриланс",
+        "counterparty": "Acme Corp", "direction": "acme",
     })
     assert r.status_code == 201
     inflows = client.get("/api/inflows").json()
     assert len(inflows) == 1
     assert inflows[0]["status"] == "received"
     assert inflows[0]["expected_date"] == TODAY.isoformat()
-    assert inflows[0]["direction"] == "Фриланс"
+    assert inflows[0]["direction"] == "acme"
 
 
 def test_income_summary_groups_by_direction_and_month(client):
     seed_fx(client, "HKD", 0.125)
     # два факта в разных направлениях + один ожидаемый (в сводку не входит)
     client.post("/api/income", json={
-        "amount": 3000, "currency": "USD", "counterparty": "Client B",
-        "direction": "Фриланс", "received_date": TODAY.isoformat(),
+        "amount": 3000, "currency": "USD", "counterparty": "Acme Corp",
+        "direction": "acme", "received_date": TODAY.isoformat(),
     })
     client.post("/api/income", json={
-        "amount": 40000, "currency": "HKD", "counterparty": "Client A",
-        "direction": "Консалтинг", "received_date": TODAY.isoformat(),
+        "amount": 40000, "currency": "HKD", "counterparty": "Atamura",
+        "direction": "обучение AI-агентам", "received_date": TODAY.isoformat(),
     })
     client.post("/api/inflows", json={
         "name": "Ожидаемое", "amount": 9999, "currency": "USD",
@@ -549,8 +549,8 @@ def test_income_summary_groups_by_direction_and_month(client):
     })
     s = client.get("/api/income").json()
     assert s["base_currency"] == "USD"
-    assert s["by_direction"]["Фриланс"] == pytest.approx(3000.0)
-    assert s["by_direction"]["Консалтинг"] == pytest.approx(5000.0)  # 40000 * 0.125
+    assert s["by_direction"]["acme"] == pytest.approx(3000.0)
+    assert s["by_direction"]["обучение AI-агентам"] == pytest.approx(5000.0)  # 40000 * 0.125
     month = TODAY.strftime("%Y-%m")
     assert s["by_month"][month] == pytest.approx(8000.0)
     assert len(s["items"]) == 2

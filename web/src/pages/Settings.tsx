@@ -467,7 +467,7 @@ export default function Settings() {
         >
           <div className="grid gap-4 lg:grid-cols-2">
             <RefManager title="Направления дохода" path="directions"
-              hint="Фриланс, Консалтинг — чтобы видеть, откуда пришли деньги." />
+              hint="Acme, обучение AI-агентам — чтобы видеть, откуда пришли деньги." />
             <RefManager title="Категории расходов" path="categories"
               hint="Жильё, налоги — чтобы группировать предстоящие расходы." />
           </div>

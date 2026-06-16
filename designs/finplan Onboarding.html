@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+<style data-omelette-injected>html,body{background:transparent}</style><script data-omelette-injected>(()=>{var j=[];var x=false;var S=30000;var f=3000;document.addEventListener("DOMContentLoaded",()=>{const H=window.Babel;const G="om-src-id";if(H&&H.registerPlugin&&!(H.availablePlugins&&H.availablePlugins[G])){H.registerPlugin(G,({types:Y})=>({visitor:{JSXOpeningElement(U,Q){const J=U.node;if(J.name&&J.name.type==="JSXMemberExpression")return;for(let V=0;V<J.attributes.length;V++){const L=J.attributes[V];if(L.type==="JSXAttribute"&&L.name&&L.name.name==="data-om-id")return}const W=Q.file&&Q.file.opts&&Q.file.opts.filename||"?";const Z=J.loc&&J.loc.start;const z=`jsx:${W}:${J.start??0}:${Z?Z.line:0}:${Z?Z.column+1:0}`;J.attributes.push(Y.jsxAttribute(Y.jsxIdentifier("data-om-id"),Y.stringLiteral(z)))}}}))}const k="om-text-extract";let A=false;if(x&&H&&H.registerPlugin&&!(H.availablePlugins&&H.availablePlugins[k])){const Y=window.React;if(Y&&Y.useSyncExternalStore&&Y.createElement){A=true;const U={};const Q=new Set;let J=0;window.__omTextO=U;window.__omTextSet=(z)=>{for(const V in z){const L=z[V];if(L==null)delete U[V];else U[V]=L}J++;Q.forEach((V)=>V())};const W=(z)=>{Q.add(z);return()=>Q.delete(z)};const Z=()=>J;window.__OmT=function z(V){Y.useSyncExternalStore(W,Z,Z);return Y.createElement("span",{"data-om-text":V.i,className:"__om-t"},V.i in U?U[V.i]:V.children)};H.registerPlugin(k,({types:z})=>{const V={style:1,script:1,noscript:1,textarea:1,title:1,option:1,text:1,tspan:1,textPath:1};const L={placeholder:1,alt:1,title:1,label:1,"aria-label":1,"aria-description":1,"aria-placeholder":1};const _=($,C)=>z.logicalExpression("??",z.memberExpression(z.logicalExpression("||",z.memberExpression(z.identifier("window"),z.identifier("__omTextO")),z.objectExpression([])),z.stringLiteral($),true),C);const E=($)=>$.file&&$.file.opts&&$.file.opts.filename||"?";const B=($)=>$.file&&$.file.code||"";const b=($,C)=>{const X=(F)=>F&&F.start!=null&&F.end!=null&&(F.type==="StringLiteral"||F.type==="TemplateLiteral"&&F.expressions.length===0)?[F.start,F.end]:null;const N=X(C);if(N)return N;if(C&&C.type==="Identifier"){const F=$.scope.getBinding(C.name);if(F&&F.constant&&F.path.node.type==="VariableDeclarator"){return X(F.path.node.init)}}return null};const M=($,C,X)=>{const N=$.node;let F=false;const w=(K,q)=>{F=true;return z.jsxElement(z.jsxOpeningElement(z.jsxIdentifier("__OmT"),[z.jsxAttribute(z.jsxIdentifier("i"),z.stringLiteral(K))],false),z.jsxClosingElement(z.jsxIdentifier("__OmT")),[q],false)};const D=N.children.map((K)=>{if(K.type==="JSXText"){if(K.start==null||K.end==null)return K;const q=X.slice(K.start,K.end);const R=q.length-q.trimStart().length;const m=q.length-q.trimEnd().length;if(R+m>=q.length)return K;return w(`txt:${C}:${K.start+R}:${K.end-m}`,K)}if(K.type==="JSXExpressionContainer"){const q=b($,K.expression);if(q)return w(`str:${C}:${q[0]}:${q[1]}`,K)}return K});if(F)N.children=D};return{visitor:{JSXOpeningElement($,C){const X=$.node;const N=E(C);const F={};for(let w=0;w<X.attributes.length;w++){const D=X.attributes[w];if(D.type!=="JSXAttribute"||!D.name)continue;const K=D.name.name;if(!L[K])continue;if(!D.value||D.value.type!=="StringLiteral")continue;if(D.value.start==null||D.value.end==null)continue;const q=`txt:${N}:${D.value.start}:${D.value.end}`;F[K]=q;D.value=z.jsxExpressionContainer(_(q,z.stringLiteral(D.value.value)))}if(Object.keys(F).length){X.attributes.push(z.jsxAttribute(z.jsxIdentifier("data-om-text-attrs"),z.stringLiteral(JSON.stringify(F))))}},JSXElement($,C){const X=$.node.openingElement;const N=X&&X.name&&X.name.name;if(N==="__OmT")return;if(typeof N==="string"&&V[N])return;M($,E(C),B(C))},JSXFragment($,C){M($,E(C),B(C))}}}})}}const u=A?["transform-react-jsx-source",G,k]:["transform-react-jsx-source",G];document.querySelectorAll('script[type="text/babel"],script[type="text/jsx"]').forEach((Y,U)=>{const Q=Y.getAttribute("data-plugins")||"";const J=u.filter((W)=>Q.indexOf(W)<0);if(J.length){Y.setAttribute("data-plugins",Q?`${Q},${J.join(",")}`:J.join(","))}if(!Y.hasAttribute("data-filename")){Y.setAttribute("data-filename",Y.getAttribute("src")||`inline-${U}`)}})});var y=window.parent;if(y&&y!==window){const H=(Q,J)=>{try{y.postMessage({__omelette_log:true,type:Q,data:J},"*")}catch{}};["log","warn","error"].forEach((Q)=>{const J=console[Q];console[Q]=(...W)=>{const Z=W.map((z)=>{try{return typeof z==="object"?JSON.stringify(z):String(z)}catch{try{return String(z)}catch{return"[unstringifiable]"}}}).join(" ");H(Q,Z);J.apply(console,W)}});window.addEventListener("error",(Q)=>{const J=Q.target;if(J&&J!==window&&J.tagName){const W=J.src||J.href||"";H("resource_error",`${J.tagName} failed to load: ${W}`)}else{H("error",`${Q.message||"Unknown error"} at ${Q.filename||"?"}:${Q.lineno||0}:${Q.colno||0}`)}},true);window.addEventListener("unhandledrejection",(Q)=>{const J=Q.reason;const W=J instanceof Error?`${J.message} ${J.stack}`:String(J);H("error",`Unhandled rejection: ${W}`)});const G=()=>{try{y.postMessage({type:"omelette:height",height:document.documentElement.scrollHeight},"*")}catch{}};if(document.readyState==="complete")G();else window.addEventListener("load",G);if(window.ResizeObserver)new ResizeObserver(G).observe(document.documentElement);const k={};let A=0;window.claude={complete(Q){return new Promise((J,W)=>{if(!j.length){W(new Error("claude.complete: no parent origin"));return}const Z=`c${++A}`;const z=()=>setTimeout(()=>{delete k[Z];W(new Error(`claude.complete: no data for ${S/1000}s`))},S);const V=z();k[Z]={resolve:J,reject:W,text:"",t:V,arm:z};try{for(const L of j){y.postMessage({__om_api:true,id:Z,body:Q},L)}}catch(L){clearTimeout(V);delete k[Z];W(L)}})}};const u={};let Y=0;window.omelette={writeFile:(Q,J)=>new Promise((W,Z)=>{if(!j.length){W();return}const z=`f${++Y}`;const V=setTimeout(()=>{delete u[z];W()},f);u[z]={resolve:W,reject:Z,t:V};try{for(const L of j){y.postMessage({__om_file:true,id:z,op:"write",path:Q,content:J},L)}}catch{clearTimeout(V);delete u[z];W()}})};const U=(Q)=>{try{return JSON.stringify(Q)}catch{return JSON.stringify(String(Q))}};window.addEventListener("message",(Q)=>{if(j.indexOf(Q.origin)<0)return;if(Q.source!==y)return;const J=Q.data;if(!J)return;if(J.type==="omelette-preview-refresh"){if(typeof J.token!=="string"||!/^[0-9a-f.-]+(\.(rc|pr-[0-9]+))?(\.[0-9]+\.[0-9a-f]{16})?$/.test(J.token))return;const z=Math.max(1,Math.floor((J.expiresAt||0)-Date.now()/1000));document.cookie="__Host-omelette-preview="+J.token+"; Path=/; Secure; SameSite=None; Partitioned; Max-Age="+z;return}if(J.__om_file_r){const z=u[J.id];if(!z)return;clearTimeout(z.t);delete u[J.id];if(J.ok)z.resolve();else z.reject(new Error(J.error||"write failed"));return}if(J.__om_api_r){const z=k[J.id];if(!z)return;if(J.error!=null){clearTimeout(z.t);delete k[J.id];z.reject(new Error(J.error));return}if(J.chunk!=null){clearTimeout(z.t);z.t=z.arm();z.text+=J.chunk;return}if(J.done){clearTimeout(z.t);delete k[J.id];z.resolve(J.text!=null?J.text:z.text);return}return}if(!J.__om_eval)return;const W=J;const Z=(z)=>{Q.source.postMessage({...z,__om_eval_r:1,id:W.id},Q.origin)};try{const z=(0,eval)(W.code);if(z&&typeof z.then==="function"){z.then((V)=>Z({ok:1,v:U(V)}),(V)=>Z({ok:0,e:String(V)}))}else{Z({ok:1,v:U(z)})}}catch(z){Z({ok:0,e:String(z)})}})}})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>finplan — Настройка</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#F3F1EC; --bg-soft:#EEEBE4; --card:#FFFFFF; --card-2:#F5F3EE;
+  --ink:#171511; --ink-2:#544F46; --ink-3:#928B7E;
+  --line:#E6E2D9; --line-2:#EEEAE2;
+  --accent:#BC6443; --accent-2:#A4502F; --accent-soft:#F6E7DD;
+  --green:#2E8456; --green-soft:#E1EFE6;
+  --amber:#AE7E26; --amber-soft:#F4ECD6;
+  --red:#B23A2E; --red-soft:#F1DED9;
+  --shadow:0 1px 1px rgba(40,30,15,.04), 0 4px 16px -10px rgba(40,30,15,.10);
+  --shadow-sm:0 1px 1px rgba(40,30,15,.05);
+  --shadow-lg:0 2px 4px rgba(40,30,15,.04), 0 20px 48px -24px rgba(40,30,15,.26);
+  --radius:11px; --radius-sm:8px;
+}
+[data-theme="dark"]{
+  --bg:#151310; --bg-soft:#1A1814; --card:#201E19; --card-2:#27241F;
+  --ink:#F1EEE6; --ink-2:#ABA597; --ink-3:#797264;
+  --line:#322E27; --line-2:#28251F;
+  --accent:#D98B66; --accent-2:#E29C7B; --accent-soft:#33231A;
+  --green:#5DB17C; --green-soft:#1B2C21;
+  --amber:#CE9F52; --amber-soft:#30270F;
+  --red:#CF6E60; --red-soft:#331E19;
+  --shadow:0 1px 1px rgba(0,0,0,.34), 0 8px 22px -14px rgba(0,0,0,.6);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+  --shadow-lg:0 2px 4px rgba(0,0,0,.4), 0 24px 54px -26px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{
+  font-family:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+  background:var(--bg); color:var(--ink); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; font-feature-settings:"ss01","cv01";
+  letter-spacing:-.005em; transition:background .35s ease,color .35s ease;
+}
+.tnum{font-variant-numeric:tabular-nums}
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+
+/* ---------- sidebar ---------- */
+.sidebar{border-right:1px solid var(--line);background:var(--bg-soft);padding:20px 14px;
+  display:flex;flex-direction:column;gap:3px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 20px}
+.brand-mark{width:29px;height:29px;border-radius:8px;background:linear-gradient(155deg,var(--accent),var(--accent-2));
+  display:grid;place-items:center;flex:none;box-shadow:var(--shadow-sm)}
+.brand-mark svg{width:16px;height:16px;color:#fff}
+.brand-name{font-weight:600;font-size:16px;letter-spacing:-.02em}
+.nav-item{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;
+  color:var(--ink-2);font-weight:500;font-size:14px;text-decoration:none;border:1px solid transparent}
+.nav-item svg{width:18px;height:18px;flex:none;opacity:.8}
+.nav-locked .nav-item{opacity:.4;pointer-events:none}
+.nav-spacer{flex:1}
+.setup-card{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:12px 13px;margin-top:6px}
+.setup-card .sc-top{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.setup-card .sc-ic{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none}
+.setup-card .sc-ic svg{width:13px;height:13px}
+.setup-card .sc-label{font-size:12.5px;font-weight:600}
+.setup-card .sc-step{font-size:11.5px;color:var(--ink-3);margin-left:auto}
+.setup-bar{height:5px;border-radius:3px;background:var(--line-2);overflow:hidden}
+.setup-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .4s ease}
+
+/* ---------- main ---------- */
+.main{overflow-y:auto;height:100vh;display:flex;flex-direction:column}
+.ob-topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 40px 0}
+.ob-skiplink{font-size:13px;color:var(--ink-3);text-decoration:none;font-weight:500}
+.ob-skiplink:hover{color:var(--ink-2)}
+.icon-btn{width:37px;height:37px;border-radius:9px;border:1px solid var(--line);background:var(--card);
+  color:var(--ink-2);display:grid;place-items:center;cursor:pointer;transition:.15s}
+.icon-btn:hover{color:var(--ink);border-color:var(--ink-3)}
+.icon-btn svg{width:18px;height:18px}
+.ob-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;padding:30px 40px 56px;max-width:1080px;margin:0 auto;width:100%}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 18px;border-radius:9px;
+  font-family:inherit;font-size:14.5px;font-weight:550;cursor:pointer;border:1px solid transparent;text-decoration:none;transition:.15s;white-space:nowrap}
+.btn svg{width:16px;height:16px}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:var(--shadow-sm)}
+.btn-primary:hover{filter:brightness(1.05)}
+.btn-ghost{background:var(--card);border-color:var(--line);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--ink-3)}
+.btn-text{background:none;border-color:transparent;color:var(--ink-3)}
+.btn-text:hover{color:var(--ink)}
+
+/* ---------- PART A — welcome ---------- */
+.welcome{display:grid;grid-template-columns:1fr 1fr;gap:54px;align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:18px}
+.eyebrow::before{content:"";width:18px;height:1.5px;background:var(--accent);border-radius:2px}
+.welcome h1{font-size:40px;line-height:1.08;letter-spacing:-.032em;font-weight:600;text-wrap:balance}
+.welcome .lead{margin-top:18px;color:var(--ink-2);font-size:16px;line-height:1.6;max-width:46ch;text-wrap:pretty}
+.welcome-actions{display:flex;gap:12px;margin-top:28px}
+.welcome-actions .btn{height:46px;padding:0 22px;font-size:15px}
+.reassure{display:flex;align-items:flex-start;gap:9px;margin-top:24px;color:var(--ink-3);font-size:13px;line-height:1.5;max-width:42ch}
+.reassure svg{width:16px;height:16px;color:var(--green);flex:none;margin-top:1px}
+
+/* mini demo dashboard preview */
+.preview{position:relative}
+.preview-card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lg);
+  padding:18px;transform:rotate(-1.1deg);transition:transform .3s ease}
+.preview-card:hover{transform:rotate(0deg)}
+.demo-tag{position:absolute;top:-12px;left:20px;z-index:2;display:inline-flex;align-items:center;gap:6px;
+  background:var(--ink);color:var(--bg);font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;box-shadow:var(--shadow-sm)}
+.demo-tag i{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.pv-strip{border:1px solid var(--line-2);border-radius:11px;padding:15px 16px;background:var(--card-2)}
+.pv-state{display:inline-flex;align-items:center;gap:6px;background:var(--green-soft);border-radius:999px;padding:3px 10px 3px 7px;margin-bottom:11px}
+.pv-state i{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.pv-state span{font-size:11px;font-weight:600;color:var(--green);white-space:nowrap}
+.pv-eyebrow{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.pv-num{margin-top:3px;white-space:nowrap;line-height:1}
+.pv-num b{font-size:30px;font-weight:600;letter-spacing:-.03em;color:var(--green);font-variant-numeric:tabular-nums}
+.pv-num span{font-size:14px;color:var(--ink-2);font-weight:550;margin-left:5px}
+.pv-sub{font-size:12px;color:var(--ink-2);margin-top:4px}
+.pv-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.pv-fig{border:1px solid var(--line-2);border-radius:9px;padding:9px 11px;background:var(--card)}
+.pv-fl{font-size:10.5px;color:var(--ink-3)}
+.pv-fv{font-size:15px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin-top:2px}
+.pv-fv.green{color:var(--green)}
+.pv-chart{margin-top:13px;border:1px solid var(--line-2);border-radius:9px;padding:10px 12px 6px;background:var(--card)}
+.pv-chart .pc-h{font-size:11px;color:var(--ink-3);margin-bottom:4px}
+.pv-chart svg{display:block;width:100%;height:auto}
+
+/* ---------- PART B — wizard ---------- */
+.wizard{width:100%;max-width:920px;margin:0 auto}
+.wiz-head{margin-bottom:22px}
+.wiz-railrow{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.wiz-rail{display:flex;gap:6px;flex:1}
+.wiz-rail i{flex:1;height:5px;border-radius:3px;background:var(--line);transition:background .3s ease}
+.wiz-rail i.on{background:var(--accent)}
+.wiz-rail i.done{background:var(--accent);opacity:.5}
+.wiz-count{font-size:13px;color:var(--ink-3);font-weight:550;white-space:nowrap}
+.wiz-count b{color:var(--ink);font-weight:650}
+.wiz-title{font-size:27px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.wiz-sub{margin-top:7px;color:var(--ink-2);font-size:15px;max-width:54ch;text-wrap:pretty}
+
+.wiz-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px;margin-bottom:20px}
+.wiz-cols{display:grid;grid-template-columns:1fr 296px;gap:20px;align-items:start}
+
+/* editable rows (accounts / income / expense) */
+.erow-head{display:grid;gap:12px;align-items:center;padding:0 2px 8px;font-size:11.5px;
+  font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3)}
+.erows{display:flex;flex-direction:column;gap:10px}
+.erow{display:grid;gap:12px;align-items:center}
+.erow.acct{grid-template-columns:38px 1fr 116px 150px 36px}
+.erow.acct-head{grid-template-columns:38px 1fr 116px 150px 36px}
+.erow.flow{grid-template-columns:1fr 118px 82px 140px 34px}
+.erow.flow-head{grid-template-columns:1fr 118px 82px 140px 34px}
+.erow-badge{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:15px;font-weight:600;
+  background:var(--card-2);color:var(--ink-2);border:1px solid var(--line)}
+.fin{height:40px;border:1px solid var(--line);background:var(--card);border-radius:9px;padding:0 12px;
+  font-family:inherit;font-size:14px;color:var(--ink);width:100%;transition:border-color .15s,box-shadow .15s}
+.fin:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.fin::placeholder{color:var(--ink-3)}
+.selw{position:relative;display:flex}
+.selw select.fin{appearance:none;-webkit-appearance:none;padding-right:28px;cursor:pointer}
+.selw>svg{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--ink-3);pointer-events:none}
+.amt{position:relative;display:flex;align-items:center}
+.amt-sym{position:absolute;left:12px;font-size:14px;color:var(--ink-3);font-weight:550;pointer-events:none}
+.amt .fin{padding-left:26px;text-align:left;font-variant-numeric:tabular-nums;font-weight:550}
+.erow-del{width:36px;height:36px;border-radius:8px;border:1px solid transparent;background:none;color:var(--ink-3);
+  display:grid;place-items:center;cursor:pointer;transition:.15s}
+.erow-del:hover{background:var(--red-soft);color:var(--red)}
+.erow-del svg{width:16px;height:16px}
+.add-row{display:inline-flex;align-items:center;gap:8px;margin-top:14px;height:40px;padding:0 14px;border-radius:9px;
+  border:1px dashed var(--line);background:none;color:var(--ink-2);font-family:inherit;font-size:14px;font-weight:550;cursor:pointer;transition:.15s}
+.add-row:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.add-row svg{width:15px;height:15px}
+
+/* aside summary */
+.wiz-aside{display:flex;flex-direction:column;gap:14px;position:sticky;top:20px}
+.total-card{border:1px solid var(--line);border-radius:11px;padding:17px 18px;background:var(--card-2)}
+.total-label{font-size:12.5px;color:var(--ink-2);font-weight:550}
+.total-val{display:block;font-size:30px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin-top:5px}
+.total-val.green{color:var(--green)}
+.total-val.red{color:var(--red)}
+.total-note{font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.45}
+.total-split{border-top:1px solid var(--line-2);margin-top:13px;padding-top:13px;display:flex;flex-direction:column;gap:8px}
+.tsplit{display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.tsplit span{color:var(--ink-2)}
+.tsplit b{font-weight:600;font-variant-numeric:tabular-nums}
+.hint-card{border:1px solid var(--line);border-radius:11px;padding:15px 16px;background:var(--card)}
+.hint-card .hh{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:6px}
+.hint-card .hh svg{width:15px;height:15px;color:var(--accent)}
+.hint-card p{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+
+/* currency picker (step 1) */
+.cur-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.cur-card{display:flex;align-items:center;gap:13px;padding:15px 16px;border:1px solid var(--line);border-radius:11px;
+  background:var(--card);cursor:pointer;font-family:inherit;text-align:left;transition:.15s}
+.cur-card:hover{border-color:var(--ink-3)}
+.cur-card.on{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:var(--accent-soft)}
+.cur-sym{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:18px;font-weight:600;
+  background:var(--card-2);color:var(--ink);border:1px solid var(--line);flex:none}
+.cur-card.on .cur-sym{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cur-code{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.cur-name{font-size:12.5px;color:var(--ink-3)}
+.cur-meta{flex:1;min-width:0}
+.cur-check{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;flex:none;color:#fff}
+.cur-card.on .cur-check{background:var(--accent);border-color:var(--accent)}
+.cur-check svg{width:12px;height:12px;opacity:0}
+.cur-card.on .cur-check svg{opacity:1}
+.cur-card.cur-add{border-style:dashed;color:var(--ink-2)}
+.cur-card.cur-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.cur-card.cur-add .cur-sym{background:var(--card-2);color:var(--ink-3);border-color:var(--line)}
+.cur-card.cur-add:hover .cur-sym{color:var(--accent)}
+.cur-card.cur-add .cur-sym svg{width:18px;height:18px}
+
+/* finish (step 5) */
+.finish{text-align:center;padding:8px 0 4px}
+.finish-badge{width:60px;height:60px;border-radius:16px;margin:0 auto 20px;display:grid;place-items:center;
+  background:var(--green-soft);color:var(--green)}
+.finish-badge svg{width:30px;height:30px}
+.finish h2{font-size:28px;font-weight:600;letter-spacing:-.03em}
+.finish>p{color:var(--ink-2);font-size:15.5px;margin-top:9px;max-width:46ch;margin-left:auto;margin-right:auto;text-wrap:pretty}
+.runway-card{max-width:520px;margin:26px auto 0;border:1px solid var(--line);border-radius:14px;background:var(--card);
+  box-shadow:var(--shadow-lg);padding:22px 24px;text-align:left}
+.runway-top{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.runway-state{display:inline-flex;align-items:center;gap:7px;background:var(--green-soft);border-radius:999px;padding:4px 11px 4px 8px}
+.runway-state i{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.runway-state span{font-size:12px;font-weight:600;color:var(--green);white-space:nowrap}
+.runway-num{margin-top:13px;white-space:nowrap;line-height:1}
+.runway-num b{font-size:40px;font-weight:600;letter-spacing:-.035em;color:var(--green);font-variant-numeric:tabular-nums;line-height:1}
+.runway-num span{font-size:17px;color:var(--ink-2);font-weight:550;margin-left:8px}
+.runway-sub{font-size:14px;color:var(--ink-2);margin-top:8px}
+.runway-sub b{color:var(--ink);font-weight:600}
+.runway-foot{display:flex;gap:30px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-2)}
+.rf{display:flex;flex-direction:column;gap:3px}
+.rf .l{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.rf .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rf .v.green{color:var(--green)}
+.finish-actions{display:flex;gap:12px;justify-content:center;margin-top:26px}
+.finish-actions .btn{height:46px;padding:0 22px;font-size:15px}
+
+/* wizard footer */
+.wiz-foot{display:flex;align-items:center;gap:10px;margin-top:4px}
+.wiz-foot .grow{flex:1}
+
+@media(max-width:1080px){
+  .welcome{grid-template-columns:1fr;gap:34px}
+  .preview{order:-1;max-width:440px}
+}
+@media(max-width:900px){
+  .wiz-cols{grid-template-columns:1fr}
+  .wiz-aside{position:static;flex-direction:row;flex-wrap:wrap}
+  .wiz-aside>*{flex:1;min-width:220px}
+  .cur-grid{grid-template-columns:repeat(2,1fr)}
+  .erow.acct,.erow.acct-head{grid-template-columns:34px 1fr 150px 34px}
+  .erow.acct .ehide,.erow.acct-head .ehide{display:none}
+  .erow.flow,.erow.flow-head{grid-template-columns:1fr 130px 34px}
+  .erow.flow .ehide,.erow.flow-head .ehide{display:none}
+}
+@media(max-width:760px){
+  .app{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .ob-topbar,.ob-wrap{padding-left:22px;padding-right:22px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- sidebar (setup state) -->
+  <aside class="sidebar nav-locked">
+    <div class="brand">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16 L9 10 L13 13 L20 5"/><path d="M4 20h16"/></svg></span>
+      <span class="brand-name">finplan</span>
+    </div>
+    <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="11" width="8" height="10" rx="2"/><rect x="3" y="14" width="8" height="7" rx="2"/></svg>Дашборд</a>
+    <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.3" fill="currentColor" stroke="none"/></svg>Баланс</a>
+    <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7 L10 13 L14 9 L20 15"/><path d="M15 15h5v-5"/></svg>Доходы</a>
+    <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17 L10 11 L14 15 L20 9"/><path d="M15 9h5v5"/></svg>Расходы</a>
+    <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4h11l-2.2 4L17 12H6"/></svg>Мечты</a>
+    <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>Ещё</a>
+    <div class="nav-spacer"></div>
+    <div class="setup-card">
+      <div class="sc-top">
+        <span class="sc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M17 7h3"/><circle cx="15" cy="7" r="2.1"/><path d="M4 17h3"/><path d="M11 17h9"/><circle cx="9" cy="17" r="2.1"/></svg></span>
+        <span class="sc-label">Настройка</span>
+        <span class="sc-step" id="sc-step">Шаг 2 из 5</span>
+      </div>
+      <div class="setup-bar"><i id="sc-bar" style="width:40%"></i></div>
+    </div>
+  </aside>
+
+  <!-- main -->
+  <main class="main">
+    <div class="ob-topbar">
+      <a class="ob-skiplink" id="skip-all" href="finplan Dashboard.html">Пропустить настройку →</a>
+      <button class="icon-btn" id="theme-btn" aria-label="Сменить тему"></button>
+    </div>
+    <div class="ob-wrap">
+
+      <!-- ===== PART A — welcome ===== -->
+      <section class="welcome" id="welcome">
+        <div class="welcome-copy">
+          <span class="eyebrow">Добро пожаловать</span>
+          <h1>Так выглядит finplan, когда знает о ваших деньгах</h1>
+          <p class="lead">Рабочий стол справа заполнен данными реального фрилансера — Артёма, который строит продукты на ИИ. Осмотритесь спокойно, а когда будете готовы — соберём ваш прогноз за пять коротких шагов.</p>
+          <div class="welcome-actions">
+            <button class="btn btn-primary" id="start-setup">Настроить под себя</button>
+            <a class="btn btn-ghost" href="finplan Dashboard.html">Посмотреть демо</a>
+          </div>
+          <div class="reassure">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+            <span>Ничего не подключается автоматически. Вы вводите только то, что хотите, и можете пропустить любой шаг.</span>
+          </div>
+        </div>
+        <div class="preview">
+          <span class="demo-tag"><i></i>Демо · данные примера</span>
+          <div class="preview-card">
+            <div class="pv-strip">
+              <span class="pv-state"><i></i><span>Отличный запас</span></span>
+              <div class="pv-eyebrow">Запас хода</div>
+              <div class="pv-num"><b>≈ 14</b><span>мес</span></div>
+              <div class="pv-sub">денег хватает до <b style="color:var(--ink);font-weight:600">августа 2027</b></div>
+            </div>
+            <div class="pv-figs">
+              <div class="pv-fig"><div class="pv-fl">Баланс</div><div class="pv-fv tnum">$18 400</div></div>
+              <div class="pv-fig"><div class="pv-fl">Доходы / мес</div><div class="pv-fv tnum">$6 200</div></div>
+              <div class="pv-fig"><div class="pv-fl">Свободно</div><div class="pv-fv green tnum">+$2 100</div></div>
+            </div>
+            <div class="pv-chart">
+              <div class="pc-h">Прогноз баланса · 12 месяцев</div>
+              <svg viewBox="0 0 300 70" preserveAspectRatio="none">
+                <defs><linearGradient id="pva" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--green)" stop-opacity="0.18"/><stop offset="1" stop-color="var(--green)" stop-opacity="0"/></linearGradient></defs>
+                <path d="M6,26 C36,22 54,32 86,28 C116,24 146,38 178,36 C206,34 250,46 294,50 L294,66 L6,66 Z" fill="url(#pva)"/>
+                <path d="M6,26 C36,22 54,32 86,28 C116,24 146,38 178,36 C206,34 250,46 294,50" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="294" cy="50" r="3.4" fill="var(--green)"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== PART B — wizard ===== -->
+      <section class="wizard" id="wizard" hidden>
+        <div class="wiz-head">
+          <div class="wiz-railrow">
+            <div class="wiz-rail" id="wiz-rail"></div>
+            <div class="wiz-count" id="wiz-count">Шаг <b>2</b> из 5</div>
+          </div>
+          <h2 class="wiz-title" id="wiz-title">Счета и остатки</h2>
+          <p class="wiz-sub" id="wiz-sub">Добавьте счета, которыми пользуетесь. Их остатки — стартовая точка прогноза.</p>
+        </div>
+        <div id="wiz-body"></div>
+        <div class="wiz-foot">
+          <button class="btn btn-ghost" id="wiz-back">Назад</button>
+          <div class="grow"></div>
+          <button class="btn btn-text" id="wiz-skip">Пропустить шаг</button>
+          <button class="btn btn-primary" id="wiz-next">Далее</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+/* ---------- theme ---------- */
+const sun='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>';
+const moon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.6 6.6 0 0 0 21 12.8Z"/></svg>';
+const root=document.documentElement, tbtn=document.getElementById('theme-btn');
+function setTheme(t){root.setAttribute('data-theme',t);tbtn.innerHTML=t==='dark'?sun:moon;try{localStorage.setItem('finplan-theme',t)}catch(e){}}
+let savedTheme='light';try{savedTheme=localStorage.getItem('finplan-theme')||'light'}catch(e){}
+setTheme(savedTheme);
+tbtn.addEventListener('click',()=>setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark'));
+
+/* ---------- icons ---------- */
+const xsvg='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const chev='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+const plus='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
+const check='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>';
+
+/* ---------- data ---------- */
+const RATE={USD:1, USDT:1, EUR:1.08, RUB:0.0105263, GBP:1.27};
+const SYM={USD:'$', USDT:'₮', EUR:'€', RUB:'₽', GBP:'£'};
+const CUR_NAME={USD:'Доллар США', USDT:'Tether', EUR:'Евро', RUB:'Рубль', GBP:'Фунт'};
+/* пресеты валют — первыми показываются RUB · USD · EUR, остальные — «добавить свою» */
+const CUR_PRESET=['RUB','USD','EUR'];
+function addCustomCur(){
+  const code=(prompt('Код валюты (например, GBP, PLN, AED):','')||'').trim().toUpperCase();
+  if(!code)return null;
+  if(!RATE[code])RATE[code]=1;
+  if(!SYM[code])SYM[code]=code;
+  if(!CUR_NAME[code])CUR_NAME[code]='Валюта';
+  return code;
+}
+const PERIOD={weekly:'еженедельно', monthly:'ежемесячно', quarterly:'ежеквартально', once:'разово'};
+const PER_MUL={weekly:4.333, monthly:1, quarterly:1/3, once:0};
+let uid=1;
+function mk(o){o.id=uid++;return o}
+const state={
+  base:'USD',
+  accounts:[
+    mk({name:'Wise', cur:'USD', bal:9200}),
+    mk({name:'USDT · TRC-20', cur:'USDT', bal:6800}),
+    mk({name:'Карта', cur:'RUB', bal:228000}),
+  ],
+  income:[
+    mk({name:'Acme Corp · проекты', amt:3800, cur:'USD', period:'monthly'}),
+    mk({name:'Продукт · MRR', amt:620, cur:'USD', period:'monthly'}),
+    mk({name:'Консалтинг', amt:1000, cur:'USD', period:'monthly'}),
+  ],
+  expense:[
+    mk({name:'Аренда', amt:1800, cur:'USD', period:'monthly'}),
+    mk({name:'API · Anthropic / OpenAI', amt:900, cur:'USD', period:'monthly'}),
+    mk({name:'Продукты', amt:700, cur:'USD', period:'monthly'}),
+    mk({name:'VPS и облако', amt:220, cur:'USD', period:'monthly'}),
+    mk({name:'Подписки', amt:180, cur:'USD', period:'monthly'}),
+  ]
+};
+
+/* ---------- helpers ---------- */
+const group=n=>Math.round(n).toLocaleString('ru-RU').replace(/\u00A0/g,'\u202F');
+const parseNum=s=>parseInt(String(s).replace(/[^\d]/g,''),10)||0;
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+const baseSym=()=>SYM[state.base];
+function toBase(amt,cur){return amt*RATE[cur]/RATE[state.base];}
+function fmtBase(v){const s=v<0?'−':'';return s+baseSym()+group(Math.abs(v));}
+function sumBase(list){return list.reduce((a,x)=>a+toBase(x.bal!=null?x.bal:0,x.cur),0);}
+function sumMonthly(list){return list.reduce((a,x)=>a+toBase(x.amt,x.cur)*PER_MUL[x.period],0);}
+
+function curSelect(sel,field){
+  const codes=CUR_PRESET.slice();
+  let opts=codes.map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c}</option>`).join('');
+  if(!codes.includes(sel)) opts+=`<option value="${sel}" selected>${sel}</option>`;
+  opts+='<option value="__add">+ своя…</option>';
+  return `<div class="selw"><select class="fin" data-f="${field}">${opts}</select>${chev}</div>`;
+}
+function periodSelect(sel,field){
+  const opts=Object.keys(PERIOD).map(p=>`<option value="${p}" ${p===sel?'selected':''}>${PERIOD[p]}</option>`).join('');
+  return `<div class="selw ehide"><select class="fin" data-f="${field}">${opts}</select>${chev}</div>`;
+}
+
+/* ---------- steps meta ---------- */
+const steps=[
+  {n:1, name:'Валюта',  title:'Базовая валюта',           sub:'В этой валюте finplan будет показывать общий баланс и прогноз. Остальные суммы приводятся к ней автоматически.'},
+  {n:2, name:'Баланс',  title:'Счета и остатки',          sub:'Добавьте счета, которыми пользуетесь. Их остатки — стартовая точка прогноза.'},
+  {n:3, name:'Доходы',  title:'Регулярные поступления',   sub:'Гонорары, выручка продукта, консалтинг. Нерегулярные доходы можно добавить и пометить разовыми.'},
+  {n:4, name:'Расходы', title:'Регулярные расходы',       sub:'Аренда, инфраструктура, подписки и быт. Это самая предсказуемая часть прогноза.'},
+  {n:5, name:'Готово',  title:'Прогноз построен',         sub:''},
+];
+let cur=2; // focused step
+
+/* ---------- render ---------- */
+const railEl=document.getElementById('wiz-rail');
+railEl.innerHTML=steps.map(s=>`<i data-s="${s.n}"></i>`).join('');
+const body=document.getElementById('wiz-body');
+
+function renderProgress(){
+  [...railEl.children].forEach((el,i)=>{
+    el.className=''; const n=i+1;
+    if(n<cur)el.classList.add('done'); else if(n===cur)el.classList.add('on');
+  });
+  const s=steps[cur-1];
+  document.getElementById('wiz-count').innerHTML=`Шаг <b>${cur}</b> из 5`;
+  document.getElementById('wiz-title').textContent=s.title;
+  const sub=document.getElementById('wiz-sub'); sub.textContent=s.sub; sub.style.display=s.sub?'':'none';
+  document.getElementById('sc-step').textContent=cur>5?'Завершено':`Шаг ${cur} из 5`;
+  document.getElementById('sc-bar').style.width=(cur/5*100)+'%';
+  // footer
+  document.getElementById('wiz-back').textContent = cur===1?'К началу':'Назад';
+  const skip=document.getElementById('wiz-skip'); skip.style.display=(cur===5)?'none':'';
+  document.querySelector('.wiz-foot').style.display=(cur===5)?'none':'flex';
+  const next=document.getElementById('wiz-next');
+  next.innerHTML = cur===5 ? 'Открыть дашборд' : (cur===4?'К результату':'Далее');
+}
+
+function rowAcct(a){
+  return `<div class="erow acct" data-id="${a.id}">
+    <span class="erow-badge">${SYM[a.cur]||'•'}</span>
+    <input class="fin" data-f="name" value="${esc(a.name)}" placeholder="Название счёта"/>
+    <div class="ehide">${curSelect(a.cur,'cur')}</div>
+    <div class="amt"><span class="amt-sym">${SYM[a.cur]}</span><input class="fin" data-f="bal" inputmode="numeric" value="${group(a.bal)}"/></div>
+    <button class="erow-del" data-act="del" aria-label="Удалить">${xsvg}</button>
+  </div>`;
+}
+function rowFlow(r){
+  return `<div class="erow flow" data-id="${r.id}">
+    <input class="fin" data-f="name" value="${esc(r.name)}" placeholder="Источник"/>
+    <div class="amt"><span class="amt-sym">${SYM[r.cur]}</span><input class="fin" data-f="amt" inputmode="numeric" value="${group(r.amt)}"/></div>
+    ${curSelect(r.cur,'cur')}
+    ${periodSelect(r.period,'period')}
+    <button class="erow-del" data-act="del" aria-label="Удалить">${xsvg}</button>
+  </div>`;
+}
+
+function asideTotal(label,val,note,cls){
+  return `<div class="total-card"><span class="total-label">${label}</span><span class="total-val ${cls||''}" id="t-main">${val}</span><span class="total-note">${note}</span></div>`;
+}
+function hint(title,text){
+  return `<div class="hint-card"><div class="hh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>${title}</div><p>${text}</p></div>`;
+}
+
+function renderStep(){
+  const s=steps[cur-1];
+  if(cur===1){
+    body.innerHTML=`<div class="wiz-card">
+      <div class="cur-grid">${CUR_PRESET.map(c=>`
+        <button class="cur-card ${c===state.base?'on':''}" data-cur="${c}">
+          <span class="cur-sym">${SYM[c]}</span>
+          <span class="cur-meta"><div class="cur-code">${c}</div><div class="cur-name">${CUR_NAME[c]}</div></span>
+          <span class="cur-check">${check}</span>
+        </button>`).join('')}
+        ${CUR_PRESET.includes(state.base)?'':`
+        <button class="cur-card on" data-cur="${state.base}">
+          <span class="cur-sym">${SYM[state.base]||state.base}</span>
+          <span class="cur-meta"><div class="cur-code">${state.base}</div><div class="cur-name">${CUR_NAME[state.base]||'Валюта'}</div></span>
+          <span class="cur-check">${check}</span>
+        </button>`}
+        <button class="cur-card cur-add" data-act="cur-add">
+          <span class="cur-sym">${plus}</span>
+          <span class="cur-meta"><div class="cur-code">Добавить свою</div><div class="cur-name">любая другая валюта</div></span>
+        </button></div>
+      <p class="total-note" style="margin-top:16px">Базовую валюту можно изменить позже в настройках — прогноз пересчитается автоматически.</p>
+    </div>`;
+  }
+  else if(cur===2){
+    body.innerHTML=`<div class="wiz-card"><div class="wiz-cols">
+      <div>
+        <div class="erow acct acct-head erow-head"><span></span><span>Счёт</span><span class="ehide">Валюта</span><span>Остаток</span><span></span></div>
+        <div class="erows" id="rows">${state.accounts.map(rowAcct).join('')}</div>
+        <button class="add-row" data-act="add">${plus}Добавить счёт</button>
+      </div>
+      <aside class="wiz-aside">
+        ${asideTotal('Итого по счетам', fmtBase(sumBase(state.accounts)), state.accounts.length+' '+plural(state.accounts.length,'счёт','счёта','счетов')+' · в базовой валюте ('+state.base+')')}
+        ${hint('Зачем это нужно','Остатки на счетах — отметка «сегодня» на графике прогноза. От неё finplan считает, на сколько хватит денег.')}
+      </aside>
+    </div></div>`;
+  }
+  else if(cur===3||cur===4){
+    const list=cur===3?state.income:state.expense;
+    const monthly=sumMonthly(list);
+    let asideExtra='';
+    if(cur===4){
+      const inc=sumMonthly(state.income), free=inc-monthly;
+      asideExtra=`<div class="total-card"><span class="total-label">Свободно в месяц</span><span class="total-val ${free>=0?'green':'red'}" id="t-free">${(free>=0?'+':'')+fmtBase(free)}</span>
+        <div class="total-split"><div class="tsplit"><span>Доходы</span><b>${fmtBase(inc)}</b></div><div class="tsplit"><span>Расходы</span><b>−${fmtBase(monthly)}</b></div></div></div>`;
+    }
+    body.innerHTML=`<div class="wiz-card"><div class="wiz-cols">
+      <div>
+        <div class="erow flow flow-head erow-head"><span>${cur===3?'Источник':'Статья'}</span><span>Сумма</span><span>Валюта</span><span class="ehide">Период</span><span></span></div>
+        <div class="erows" id="rows">${list.map(rowFlow).join('')}</div>
+        <button class="add-row" data-act="add">${plus}${cur===3?'Добавить доход':'Добавить расход'}</button>
+      </div>
+      <aside class="wiz-aside">
+        ${asideTotal(cur===3?'Доходы в месяц':'Расходы в месяц', fmtBase(monthly), 'приведено к месяцу и базовой валюте')}
+        ${asideExtra||hint('Совет','Достаточно крупных статей. Мелочи можно объединить в одну строку «Прочее» — на точность прогноза это почти не влияет.')}
+      </aside>
+    </div></div>`;
+  }
+  else if(cur===5){
+    const bal=sumBase(state.accounts), inc=sumMonthly(state.income), exp=sumMonthly(state.expense), free=inc-exp;
+    body.innerHTML=`<div class="finish">
+      <div class="finish-badge">${check}</div>
+      <h2>Прогноз построен</h2>
+      <p>Готово. finplan собрал ваши счета, доходы и расходы — и посчитал, на сколько хватит денег.</p>
+      <div class="runway-card">
+        <div class="runway-top">
+          <span class="runway-state"><i></i><span>Отличный запас</span></span>
+          <span class="total-note">базовый сценарий</span>
+        </div>
+        <div class="pv-eyebrow" style="margin-top:14px">Запас хода</div>
+        <div class="runway-num"><b>≈ 14</b><span>месяцев</span></div>
+        <div class="runway-sub">при текущем ритме денег хватает до <b>августа 2027</b></div>
+        <div class="runway-foot">
+          <div class="rf"><span class="l">Баланс</span><span class="v tnum">${fmtBase(bal)}</span></div>
+          <div class="rf"><span class="l">Доходы / мес</span><span class="v tnum">${fmtBase(inc)}</span></div>
+          <div class="rf"><span class="l">Свободно / мес</span><span class="v green tnum">${(free>=0?'+':'')+fmtBase(free)}</span></div>
+        </div>
+      </div>
+      <div class="finish-actions">
+        <a class="btn btn-primary" href="finplan Dashboard.html">Открыть дашборд</a>
+        <button class="btn btn-ghost" data-act="back-finish">Вернуться к настройке</button>
+      </div>
+    </div>`;
+  }
+  renderProgress();
+}
+function plural(n,a,b,c){const m=n%100,d=n%10;return m>10&&m<20?c:d===1?a:d>1&&d<5?b:c;}
+
+function refreshTotals(){
+  if(cur===2){const t=document.getElementById('t-main'); if(t)t.textContent=fmtBase(sumBase(state.accounts));}
+  if(cur===3){const t=document.getElementById('t-main'); if(t)t.textContent=fmtBase(sumMonthly(state.income));}
+  if(cur===4){
+    const exp=sumMonthly(state.expense), inc=sumMonthly(state.income), free=inc-exp;
+    const t=document.getElementById('t-main'); if(t)t.textContent=fmtBase(exp);
+    const f=document.getElementById('t-free'); if(f){f.textContent=(free>=0?'+':'')+fmtBase(free);f.className='total-val '+(free>=0?'green':'red');}
+  }
+}
+function curList(){return cur===2?state.accounts:cur===3?state.income:state.expense;}
+function newItem(){return cur===2?mk({name:'',cur:state.base,bal:0}):mk({name:'',amt:0,cur:state.base,period:'monthly'});}
+
+/* ---------- interactions ---------- */
+body.addEventListener('input',e=>{
+  const f=e.target.closest('.fin'); if(!f||f.tagName==='SELECT')return;
+  const row=f.closest('.erow'); if(!row)return;
+  const item=curList().find(x=>x.id==row.dataset.id); if(!item)return;
+  const field=f.dataset.f;
+  if(field==='bal'||field==='amt'){item[field]=parseNum(f.value);refreshTotals();}
+  else item[field]=f.value;
+});
+body.addEventListener('change',e=>{
+  const sel=e.target.closest('select.fin'); if(!sel)return;
+  const row=sel.closest('.erow'); if(!row)return;
+  const item=curList().find(x=>x.id==row.dataset.id); if(!item)return;
+  if(sel.dataset.f==='cur' && sel.value==='__add'){
+    const code=addCustomCur();
+    item.cur=code||item.cur; renderStep(); return;
+  }
+  item[sel.dataset.f]=sel.value; renderStep();
+});
+body.addEventListener('click',e=>{
+  const del=e.target.closest('[data-act="del"]');
+  if(del){const id=del.closest('.erow').dataset.id;const l=curList();l.splice(l.findIndex(x=>x.id==id),1);renderStep();return;}
+  const add=e.target.closest('[data-act="add"]');
+  if(add){curList().push(newItem());renderStep();const rows=document.getElementById('rows');if(rows)rows.lastElementChild.querySelector('.fin').focus();return;}
+  const cc=e.target.closest('.cur-card');
+  if(cc){
+    if(cc.dataset.act==='cur-add'){const code=addCustomCur();if(code)state.base=code;renderStep();return;}
+    state.base=cc.dataset.cur;renderStep();return;
+  }
+  const bf=e.target.closest('[data-act="back-finish"]');
+  if(bf){cur=4;renderStep();return;}
+});
+
+/* ---------- wizard nav ---------- */
+const welcome=document.getElementById('welcome'), wizard=document.getElementById('wizard');
+function enterWizard(step){welcome.hidden=true;wizard.hidden=false;cur=step;renderStep();window.scrollTo(0,0);}
+document.getElementById('start-setup').addEventListener('click',()=>enterWizard(1));
+document.getElementById('wiz-back').addEventListener('click',()=>{
+  if(cur===1){wizard.hidden=true;welcome.hidden=false;window.scrollTo(0,0);}
+  else{cur--;renderStep();window.scrollTo(0,0);}
+});
+document.getElementById('wiz-next').addEventListener('click',()=>{
+  if(cur===5){window.location.href='finplan Dashboard.html';return;}
+  cur++;renderStep();window.scrollTo(0,0);
+});
+document.getElementById('wiz-skip').addEventListener('click',()=>{if(cur<5){cur++;renderStep();window.scrollTo(0,0);}});
+
+/* start on welcome; pre-render wizard at focused step 2 */
+renderStep();
+</script>
+</body>
+</html>

@@ -55,7 +55,7 @@ class InflowRow(Base):
     recurrence: Mapped[str] = mapped_column(String(10), default="once")  # once | weekly | monthly | yearly
     recurrence_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     counterparty: Mapped[str | None] = mapped_column(String(120), nullable=True)  # от кого
-    direction: Mapped[str | None] = mapped_column(String(80), nullable=True)  # направление (Фриланс, обучение…)
+    direction: Mapped[str | None] = mapped_column(String(80), nullable=True)  # направление (acme, обучение…)
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
@@ -86,7 +86,7 @@ class Wish(Base):
 
 
 class Direction(Base):
-    """Справочник направлений дохода (Фриланс, Консалтинг…)."""
+    """Справочник направлений дохода (acme, обучение AI-агентам…)."""
     __tablename__ = "directions"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80), unique=True)
@@ -151,7 +151,7 @@ def make_engine(url: str):
     return create_engine(url, pool_pre_ping=True)
 
 
-DEFAULT_DIRECTIONS = ["Фриланс", "Консалтинг"]
+DEFAULT_DIRECTIONS = ["acme", "обучение AI-агентам"]
 DEFAULT_CATEGORIES = ["Жильё", "Образование", "Налоги", "Путешествия", "Страховки", "Прочее"]
 
 # колонки валют, расширенные с varchar(3) → varchar(12) (USDT/прочие тикеры не влезали)
