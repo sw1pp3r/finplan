@@ -156,13 +156,19 @@ export function CoachTour() {
     setReady(false)
   }, [idx])
 
-  // ищем цель (страница может грузиться → поллим), поднимаем её под шапку, затем меряем. rect НЕ
-  // обнуляем между шагами — подсветка остаётся в DOM и плавно переезжает к новой цели. Пока тур
-  // открыт, следим за размером цели (ResizeObserver) — если пользователь добавил счёт/строку и
-  // карточка-цель выросла, подсветка подстраивается.
+  // ищем цель (страница может грузиться → поллим + MutationObserver), поднимаем её под шапку,
+  // затем меряем. Пока тур открыт, следим за размером цели (ResizeObserver) — если пользователь
+  // добавил счёт/строку и карточка-цель выросла, подсветка подстраивается.
+  //
+  // ВАЖНО: если цели ещё нет в DOM (перешли на новую вкладку, форма ещё не открылась) — СБРАСЫВАЕМ
+  // rect в null. Иначе подсветка осталась бы на координатах ПРОШЛОГО шага (напр. снимок на /balance),
+  // а на новой странице это случайное место (как раз поверх «Ежемесячных расходов»). Лучше показать
+  // вуаль «ищем», чем рамку не на той карточке. Цель, появившуюся позже (авто-открытие формы),
+  // ловит MutationObserver — без жёсткого тайм-аута на поиск.
   useEffect(() => {
     if (!step || location.pathname !== step.route) return
     let cancelled = false
+    let done = false
     let tries = 0
     const find = () => document.querySelector<HTMLElement>(`[data-coach="${step.target}"]`)
     const remeasure = () => {
@@ -170,34 +176,56 @@ export function CoachTour() {
       if (el && !cancelled) setRect(el.getBoundingClientRect())
     }
     const ro = new ResizeObserver(remeasure)
-    const settle = () => {
-      const el = find()
-      if (el && !cancelled) {
-        setRect(el.getBoundingClientRect())
-        setReady(true)
-      }
+
+    // цели ещё нет на этой странице → убираем устаревшую подсветку прошлого шага
+    if (!find()) setRect(null)
+
+    const onFound = (el: HTMLElement) => {
+      if (done || cancelled) return
+      done = true
+      mo.disconnect()
+      ro.observe(el)
+      // MutationObserver срабатывает в момент ВСТАВКИ узла — до раскладки getBoundingClientRect
+      // может вернуть 0/частичный прямоугольник. Ждём кадр (раскладка применилась), затем меряем,
+      // при необходимости доскролливаем (мгновенно, не smooth — иначе подсветка кадрами «едет»
+      // через верх и кажется, что обведён не тот блок), и ещё кадр — итоговый замер. ready
+      // выставляем только в самом конце: подсветка (gated на visible) появляется сразу на финальном
+      // месте, без мелькания на чужом блоке.
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        // цель уже в зоне видимости (форма расходов/доходов авто-открывается на коротких
+        // страницах прямо во вьюпорте) → НЕ скроллим, чтобы не было рывка; далеко за сгибом
+        // (напр. «Счета» внизу Настроек) — мгновенный доскролл по центру.
+        const r0 = el.getBoundingClientRect()
+        const inView = r0.top >= 0 && r0.bottom <= window.innerHeight
+        if (!inView) el.scrollIntoView({ block: "center", behavior: "auto" })
+        requestAnimationFrame(() => {
+          if (cancelled) return
+          setRect(el.getBoundingClientRect())
+          setReady(true)
+        })
+      })
     }
-    const measure = () => {
-      if (cancelled) return
+    const poll = () => {
+      if (cancelled || done) return
       const el = find()
-      if (el) {
-        ro.observe(el)
-        // Центрируем цель в её СКРОЛЛ-КОНТЕЙНЕРЕ. На десктопе контент скроллится во
-        // внутреннем overflow-y-auto, а не в window — window.scrollBy там не работал, и
-        // далёкие цели («Счета» внизу Настроек) оставались у нижнего края, а подсветка
-        // уезжала вниз пустой коробкой. scrollIntoView скроллит нужный контейнер.
-        el.scrollIntoView({ block: "center", behavior: "smooth" })
-        setRect(el.getBoundingClientRect())
-        setTimeout(settle, 360)
-        return
-      }
-      if (tries++ < 40) setTimeout(measure, 50)
+      if (el) onFound(el)
+      else if (tries++ < 60) setTimeout(poll, 50)
     }
-    measure()
+    // MutationObserver ловит цель, которая появляется позже маунта (форма расходов/доходов
+    // авто-открывается эффектом уже после рендера страницы) — поллинг мог бы её пропустить.
+    const mo = new MutationObserver(() => {
+      const el = find()
+      if (el) onFound(el)
+    })
+    mo.observe(document.body, { childList: true, subtree: true })
+    poll()
+
     window.addEventListener("resize", remeasure)
     window.addEventListener("scroll", remeasure, true)
     return () => {
       cancelled = true
+      mo.disconnect()
       ro.disconnect()
       window.removeEventListener("resize", remeasure)
       window.removeEventListener("scroll", remeasure, true)
@@ -248,8 +276,10 @@ export function CoachTour() {
           затемнения; pointer-events:none — клики проходят к подсвеченному контролу */}
       {step && idx !== null && (
         <div className="pointer-events-none fixed inset-0 z-40" data-coach-overlay>
-          {/* spotlight: подсветка целевого контрола + затемнение всего вокруг (плавно переезжает) */}
-          {spot && (
+          {/* spotlight: подсветка целевого контрола + затемнение вокруг. Показываем ТОЛЬКО когда
+              шаг «устаканился» (visible: цель найдена, доскроллена и измерена) — иначе на переходе
+              между шагами/страницами рамка успевала мелькнуть не на том блоке. До этого — вуаль. */}
+          {visible && spot ? (
             <div
               data-coach-spotlight
               className="pointer-events-none fixed rounded-xl"
@@ -263,9 +293,10 @@ export function CoachTour() {
                 outlineOffset: 2,
               }}
             />
+          ) : (
+            // пока цель ищется/доскролливается — общая вуаль, чтобы было видно, что тур активен
+            <div className="pointer-events-none fixed inset-0 bg-[rgba(2,6,23,0.45)]" />
           )}
-          {/* пока цель ищется — общая вуаль, чтобы было видно, что тур активен */}
-          {!spot && <div className="pointer-events-none fixed inset-0 bg-[rgba(2,6,23,0.45)]" />}
 
           {/* карточка что/зачем/как (появляется мягким fade+rise на каждом шаге) */}
           <div
