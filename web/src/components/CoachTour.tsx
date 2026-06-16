@@ -156,79 +156,58 @@ export function CoachTour() {
     setReady(false)
   }, [idx])
 
-  // ищем цель (страница может грузиться → поллим + MutationObserver), поднимаем её под шапку,
-  // затем меряем. Пока тур открыт, следим за размером цели (ResizeObserver) — если пользователь
-  // добавил счёт/строку и карточка-цель выросла, подсветка подстраивается.
+  // Подсветка цели через НЕПРЕРЫВНЫЙ ТРЕКИНГ (rAF-цикл), а не разовый замер.
   //
-  // ВАЖНО: если цели ещё нет в DOM (перешли на новую вкладку, форма ещё не открылась) — СБРАСЫВАЕМ
-  // rect в null. Иначе подсветка осталась бы на координатах ПРОШЛОГО шага (напр. снимок на /balance),
-  // а на новой странице это случайное место (как раз поверх «Ежемесячных расходов»). Лучше показать
-  // вуаль «ищем», чем рамку не на той карточке. Цель, появившуюся позже (авто-открытие формы),
-  // ловит MutationObserver — без жёсткого тайм-аута на поиск.
+  // Почему так. Раньше rect мерили один раз и обновляли только по событиям scroll/resize/Resize-
+  // Observer. Но контент НАД целью догружается асинхронно: на шаге «Расходы» блок breakeven и
+  // «Обязательства» подтягивают `/summary` и `/obligations`, дорисовываются и толкают форму вниз —
+  // БЕЗ события scroll/resize и без изменения размера самой формы. Подсветка застревала на старой
+  // (более высокой) позиции формы — аккурат поверх «Ежемесячных расходов». На быстром headless это
+  // не воспроизводилось, на реальном браузере с сетевой задержкой — стабильно.
+  //
+  // Теперь каждый кадр сверяем фактический rect цели и двигаем подсветку за ней. Что бы ни сдвинуло
+  // цель (рефлоу, скролл, ресайз, анимация открытия формы) — рамка следует за ней в пределах кадра.
   useEffect(() => {
     if (!step || location.pathname !== step.route) return
     let cancelled = false
-    let done = false
-    let tries = 0
+    let scrolled = false
+    let raf = 0
+    let last: DOMRect | null = null
     const find = () => document.querySelector<HTMLElement>(`[data-coach="${step.target}"]`)
-    const remeasure = () => {
-      const el = find()
-      if (el && !cancelled) setRect(el.getBoundingClientRect())
-    }
-    const ro = new ResizeObserver(remeasure)
+    const differ = (a: DOMRect | null, b: DOMRect) =>
+      !a || Math.abs(a.top - b.top) > 0.5 || Math.abs(a.left - b.left) > 0.5 ||
+      Math.abs(a.width - b.width) > 0.5 || Math.abs(a.height - b.height) > 0.5
 
-    // цели ещё нет на этой странице → убираем устаревшую подсветку прошлого шага
+    // цели ещё нет на этой странице → убираем устаревшую подсветку прошлого шага (показываем вуаль)
     if (!find()) setRect(null)
 
-    const onFound = (el: HTMLElement) => {
-      if (done || cancelled) return
-      done = true
-      mo.disconnect()
-      ro.observe(el)
-      // MutationObserver срабатывает в момент ВСТАВКИ узла — до раскладки getBoundingClientRect
-      // может вернуть 0/частичный прямоугольник. Ждём кадр (раскладка применилась), затем меряем,
-      // при необходимости доскролливаем (мгновенно, не smooth — иначе подсветка кадрами «едет»
-      // через верх и кажется, что обведён не тот блок), и ещё кадр — итоговый замер. ready
-      // выставляем только в самом конце: подсветка (gated на visible) появляется сразу на финальном
-      // месте, без мелькания на чужом блоке.
-      requestAnimationFrame(() => {
-        if (cancelled) return
-        // цель уже в зоне видимости (форма расходов/доходов авто-открывается на коротких
-        // страницах прямо во вьюпорте) → НЕ скроллим, чтобы не было рывка; далеко за сгибом
-        // (напр. «Счета» внизу Настроек) — мгновенный доскролл по центру.
-        const r0 = el.getBoundingClientRect()
-        const inView = r0.top >= 0 && r0.bottom <= window.innerHeight
-        if (!inView) el.scrollIntoView({ block: "center", behavior: "auto" })
-        requestAnimationFrame(() => {
-          if (cancelled) return
-          setRect(el.getBoundingClientRect())
+    const tick = () => {
+      if (cancelled) return
+      const el = find()
+      if (el) {
+        // один раз, как только цель найдена и разложена: доскролливаем, если она за сгибом
+        // (напр. «Счета» внизу Настроек). Форму во вьюпорте не трогаем — мгновенно, без smooth.
+        if (!scrolled) {
+          scrolled = true
+          const r0 = el.getBoundingClientRect()
+          if (r0.height > 0 && (r0.top < 0 || r0.bottom > window.innerHeight)) {
+            el.scrollIntoView({ block: "center", behavior: "auto" })
+          }
+        }
+        const r = el.getBoundingClientRect()
+        if (r.height > 0 && differ(last, r)) {
+          last = r
+          setRect(r)
           setReady(true)
-        })
-      })
+        }
+      }
+      raf = requestAnimationFrame(tick)
     }
-    const poll = () => {
-      if (cancelled || done) return
-      const el = find()
-      if (el) onFound(el)
-      else if (tries++ < 60) setTimeout(poll, 50)
-    }
-    // MutationObserver ловит цель, которая появляется позже маунта (форма расходов/доходов
-    // авто-открывается эффектом уже после рендера страницы) — поллинг мог бы её пропустить.
-    const mo = new MutationObserver(() => {
-      const el = find()
-      if (el) onFound(el)
-    })
-    mo.observe(document.body, { childList: true, subtree: true })
-    poll()
+    raf = requestAnimationFrame(tick)
 
-    window.addEventListener("resize", remeasure)
-    window.addEventListener("scroll", remeasure, true)
     return () => {
       cancelled = true
-      mo.disconnect()
-      ro.disconnect()
-      window.removeEventListener("resize", remeasure)
-      window.removeEventListener("scroll", remeasure, true)
+      cancelAnimationFrame(raf)
     }
   }, [step, location.pathname])
 
