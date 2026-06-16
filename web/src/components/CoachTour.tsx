@@ -328,6 +328,10 @@ export function CoachTour() {
             className="fixed max-w-[92vw] rounded-xl border bg-background p-5 text-sm shadow-2xl"
             style={{
               ...cardStyle,
+              // оверлей pointer-events:none, поэтому КАРТОЧКЕ возвращаем клики — иначе кнопки
+              // «Сделал, дальше»/«Назад»/«Пропустить» мертвы. Только когда карточка видна, чтобы
+              // в момент перехода (opacity 0) не перехватывать клики у подсвеченного контрола.
+              pointerEvents: visible ? "auto" : "none",
               opacity: visible ? 1 : 0,
               transform: visible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.98)",
               transition:
