@@ -50,11 +50,11 @@ const TrashIcon = () => (
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   return (
     <div className="flex items-center justify-end gap-1">
-      <button onClick={onEdit} title="Редактировать"
+      <button onClick={onEdit} aria-label="Редактировать строку курса" title="Редактировать"
         className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
         <EditIcon />
       </button>
-      <button onClick={onDelete} title="Удалить"
+      <button onClick={onDelete} aria-label="Удалить строку курса" title="Удалить"
         className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg">
         <TrashIcon />
       </button>
@@ -76,14 +76,19 @@ function TariffEditor({ tariff, cur, onSave, onCancel, onDelete }: {
   const [price, setPrice] = useState(tariff ? String(tariff.price) : "")
   const [currency, setCurrency] = useState(tariff?.currency ?? cur)
   const [students, setStudents] = useState(tariff ? String(tariff.students) : "")
+  const priceNum = Number(price)
+  const studentsNum = Number(students || 0)
+  const canSave = Number.isFinite(priceNum) && priceNum > 0 && Number.isFinite(studentsNum) && studentsNum >= 0
 
-  const save = () =>
+  const save = () => {
+    if (!canSave) return
     onSave({
       name: name.trim() || "Тариф",
-      price: Number(price) || 0,
+      price: priceNum,
       currency: currency || cur,
-      students: Math.round(Number(students)) || 0,
+      students: Math.round(studentsNum),
     })
+  }
 
   return (
     <div className="rounded-lg bg-card p-3 shadow-[0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]">
@@ -92,19 +97,19 @@ function TariffEditor({ tariff, cur, onSave, onCancel, onDelete }: {
           placeholder="Название тарифа" className="h-9" aria-label="Тариф" autoFocus />
         <div className="flex items-center gap-2">
           <Input value={price} onChange={(e) => setPrice(e.target.value)}
-            type="number" step="any" inputMode="numeric" placeholder="Цена"
+            type="number" step="any" min="0.01" inputMode="numeric" placeholder="Цена"
             className={cn(inputCls, "w-28")} aria-label="Цена" />
           <CurrencySelect value={currency} onChange={setCurrency} className="w-[88px]" />
         </div>
         <Input value={students} onChange={(e) => setStudents(e.target.value)}
-          type="number" inputMode="numeric" placeholder="Продаж"
+          type="number" min="0" inputMode="numeric" placeholder="Продаж"
           className={cn(inputCls)} aria-label="Продаж в месяц" />
       </div>
       <div className="mt-3 flex items-center gap-2 border-t border-line-2 pt-3">
         <Button variant="ghost" size="sm" onClick={onCancel}>Отмена</Button>
         <div className="flex-1" />
         {onDelete && <Button variant="outline" size="sm" onClick={onDelete}>Удалить</Button>}
-        <Button size="sm" onClick={save}>Сохранить</Button>
+        <Button size="sm" onClick={save} disabled={!canSave}>Сохранить</Button>
       </div>
     </div>
   )
@@ -122,14 +127,18 @@ function CostEditor({ cost, cur, onSave, onCancel, onDelete }: {
   const [amount, setAmount] = useState(cost ? String(cost.amount) : "")
   const [currency, setCurrency] = useState(cost?.currency ?? cur)
   const [kind, setKind] = useState<string>(cost?.kind ?? "monthly")
+  const amountNum = Number(amount)
+  const canSave = Number.isFinite(amountNum) && amountNum > 0
 
-  const save = () =>
+  const save = () => {
+    if (!canSave) return
     onSave({
       name: name.trim() || "Расход",
-      amount: Number(amount) || 0,
+      amount: amountNum,
       currency: currency || cur,
       kind,
     })
+  }
 
   return (
     <div className="rounded-lg bg-card p-3 shadow-[0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]">
@@ -138,7 +147,7 @@ function CostEditor({ cost, cur, onSave, onCancel, onDelete }: {
           placeholder="Статья расхода" className="h-9" aria-label="Статья" autoFocus />
         <div className="flex items-center gap-2">
           <Input value={amount} onChange={(e) => setAmount(e.target.value)}
-            type="number" step="any" inputMode="numeric" placeholder="Сумма"
+            type="number" step="any" min="0.01" inputMode="numeric" placeholder="Сумма"
             className={cn(inputCls, "w-28")} aria-label="Сумма" />
           <CurrencySelect value={currency} onChange={setCurrency} className="w-[88px]" />
         </div>
@@ -154,7 +163,7 @@ function CostEditor({ cost, cur, onSave, onCancel, onDelete }: {
         <Button variant="ghost" size="sm" onClick={onCancel}>Отмена</Button>
         <div className="flex-1" />
         {onDelete && <Button variant="outline" size="sm" onClick={onDelete}>Удалить</Button>}
-        <Button size="sm" onClick={save}>Сохранить</Button>
+        <Button size="sm" onClick={save} disabled={!canSave}>Сохранить</Button>
       </div>
     </div>
   )
@@ -165,7 +174,7 @@ function SectionHead({ title, sub, totalLabel, total }: {
   title: string; sub: string; totalLabel: string; total: React.ReactNode
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 px-1 pb-2">
+    <div className="flex flex-wrap items-baseline justify-between gap-3 px-1 pb-2">
       <div className="flex min-w-0 items-baseline gap-2">
         <h3 className="whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-ink-3">{title}</h3>
         <span className="whitespace-nowrap text-xs text-ink-3">{sub}</span>
@@ -407,9 +416,9 @@ export default function CoursePage() {
                 </div>
                 <span className="text-[14.5px] tnum text-ink-2">{money(t.price)} {t.currency}</span>
                 <span className="text-[14.5px] tnum text-ink-2">{t.students} / мес</span>
-                <div className="flex items-center justify-between gap-2">
+                <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 sm:col-span-1">
                   <span className="text-[14.5px] font-semibold tnum text-pos">+{money(t.gross_base)} {cur}</span>
-                  <div className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="shrink-0 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                     <RowActions onEdit={() => setEditTariff(t.id)} onDelete={() => delTariff(t.id)} />
                   </div>
                 </div>
@@ -458,8 +467,8 @@ export default function CoursePage() {
               )}>
                 <div className="col-span-2 min-w-0 truncate text-[14.5px] font-medium sm:col-span-1">{c.name}</div>
                 <span className="text-[14.5px] font-semibold tnum text-ink-2">{money(c.amount)} {c.currency}</span>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
+                <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 sm:col-span-1">
+                  <span className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className={cn(
                       "rounded-md border px-2 py-0.5 text-[11px] font-semibold",
                       c.kind === "monthly"
@@ -470,7 +479,7 @@ export default function CoursePage() {
                     </span>
                     <span className="text-[13px] tnum text-neg">−{money(c.monthly_base)} {cur}</span>
                   </span>
-                  <div className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="shrink-0 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                     <RowActions onEdit={() => setEditCost(c.id)} onDelete={() => delCost(c.id)} />
                   </div>
                 </div>

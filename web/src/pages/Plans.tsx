@@ -65,7 +65,14 @@ const DotsIcon = () => (
 )
 
 // одна сетка для read-row и form-row — колонки совпадают, нет «прыжка» при редактировании
-const GRID = "grid grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px] items-center gap-3.5"
+const GRID =
+  "grid grid-cols-[40px_minmax(0,1fr)_minmax(120px,158px)] items-center gap-3.5 " +
+  "lg:grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px]"
+const ACTION_RAIL =
+  "relative mt-3 flex flex-wrap items-center justify-end gap-1 border-t border-line-2 pt-3 opacity-100 " +
+  "lg:pointer-events-none lg:absolute lg:right-3.5 lg:top-1/2 lg:mt-0 lg:-translate-y-1/2 " +
+  "lg:border-t-0 lg:bg-gradient-to-l lg:from-card-2 lg:from-[28%] lg:to-transparent lg:pl-9 lg:pt-0 " +
+  "lg:opacity-0 lg:transition-opacity lg:group-hover:pointer-events-auto lg:group-hover:opacity-100"
 
 // ── модуль «Ежемесячные расходы» + точка безубыточности ──────────────────────
 function Breakeven({ data }: { data: Expenses }) {
@@ -297,32 +304,32 @@ export default function Plans() {
           </span>
           <span className="flex min-w-0 justify-start"><StatusChip status={o.status} /></span>
         </div>
-        {/* hover actions */}
-        <div className="pointer-events-none absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center gap-1 bg-gradient-to-l from-card-2 from-[28%] to-transparent pl-9 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-          <button type="button" title="Редактировать" onClick={() => startEdit(o)}
+        <div className={ACTION_RAIL} aria-label="Действия с расходом">
+          <button type="button" aria-label="Редактировать расход" title="Редактировать" onClick={() => startEdit(o)}
             className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
             <EditIcon />
           </button>
           {o.status === "planned" ? (
             <>
               <button type="button"
+                aria-label={recur ? "Отметить расход оплаченным за период" : "Отметить расход оплаченным"}
                 title={recur ? "оплатить за этот период → перейти к следующему" : undefined}
                 onClick={() => setObStatus(o.id, "paid")}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-[11px] text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos">
                 <CheckIcon />Оплачено
               </button>
-              <button type="button" title="Отменить" onClick={() => setObStatus(o.id, "cancelled")}
+              <button type="button" aria-label="Отменить расход" title="Отменить" onClick={() => setObStatus(o.id, "cancelled")}
                 className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
                 ✕
               </button>
             </>
           ) : (
-            <button type="button" title="Вернуть в план" onClick={() => setObStatus(o.id, "planned")}
+            <button type="button" aria-label="Вернуть расход в план" title="Вернуть в план" onClick={() => setObStatus(o.id, "planned")}
               className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-[11px] text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
               Вернуть
             </button>
           )}
-          <button type="button" title="Удалить" onClick={() => api.delete(`/obligations/${o.id}`).then(load)}
+          <button type="button" aria-label="Удалить расход" title="Удалить" onClick={() => api.delete(`/obligations/${o.id}`).then(load)}
             className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg">
             <TrashIcon />
           </button>
@@ -348,7 +355,7 @@ export default function Plans() {
       </span>
       <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Статья расхода" aria-label="Статья" required className="h-[38px]" />
       <div className="flex min-w-0 items-center gap-1.5">
-        <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" placeholder="0" aria-label="Сумма" required className="tnum h-[38px] min-w-0 font-medium" />
+        <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" min="0.01" placeholder="0" aria-label="Сумма" required className="tnum h-[38px] min-w-0 font-medium" />
         <CurrencySelect value={obCurrency} onChange={setObCurrency} className="h-[38px] w-[72px]" />
       </div>
       <Select value={recurrence} onValueChange={(v) => { setRecurrence(v); if (v === "once") setRecurrenceEnd(null) }}>

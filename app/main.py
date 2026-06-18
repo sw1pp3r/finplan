@@ -21,6 +21,7 @@ def create_app(
     fx_autofetch: bool = False,
     seed: bool = True,
     image_dir: str | None = None,
+    static_dist: str | None = None,
 ) -> FastAPI:
     database_url = database_url or os.environ.get("DATABASE_URL", "sqlite:///./finplan.db")
     api_token = api_token if api_token is not None else os.environ.get("FINPLAN_API_TOKEN") or None
@@ -62,9 +63,15 @@ def create_app(
     app.mount("/wish-images", StaticFiles(directory=image_dir_path), name="wish-images")
 
     # SPA: собранный фронт (vite build → web/dist); /api матчится раньше catch-all
-    dist = Path(__file__).resolve().parent.parent / "web" / "dist"
+    dist = (
+        Path(static_dist)
+        if static_dist is not None
+        else Path(__file__).resolve().parent.parent / "web" / "dist"
+    )
     if dist.is_dir():
-        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+        assets = dist / "assets"
+        if assets.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str):

@@ -63,6 +63,28 @@ def test_accounts_crud(client):
     assert client.get("/api/accounts").json() == []
 
 
+def test_currency_inputs_strip_and_uppercase(client):
+    acc_id = make_account(client, "Wise", " usd ")
+    account = client.get("/api/accounts").json()[0]
+    assert account["id"] == acc_id
+    assert account["currency"] == "USD"
+
+    assert client.post("/api/accounts", json={"name": "Blank", "currency": "   "}).status_code == 422
+
+    r = client.post("/api/fx", json={"currency": " eur ", "rate_to_base": 1.2})
+    assert r.status_code == 201
+    assert "EUR" in [x["currency"] for x in client.get("/api/rates").json()["rates"]]
+
+
+def test_account_type_validation_matches_supported_values(client):
+    assert client.post("/api/accounts", json={
+        "name": "Crypto wallet", "currency": "USDT", "type": "crypto",
+    }).status_code == 201
+    assert client.post("/api/accounts", json={
+        "name": "Anything", "currency": "USD", "type": "wallet-but-too-long",
+    }).status_code == 422
+
+
 # ---------- snapshots + summary ----------
 
 def test_snapshot_and_summary_t0(client):
@@ -774,6 +796,56 @@ def test_course_tariff_currency_surfaces_in_rates(client):
     assert "KZT" in rates["missing"]  # валюта используется, курса ещё нет
 
 
+def test_course_validation_rejects_impossible_values(client):
+    # Песочница курса не влияет на прогноз, но её расчёт не должен принимать
+    # невозможные значения, которые делают прибыль/мес фальшиво красивой.
+    assert client.post("/api/course/tariffs", json={
+        "name": "Минус-ученики", "price": 1000, "currency": "USD", "students": -1,
+    }).status_code == 422
+    tid = client.post("/api/course/tariffs", json={
+        "name": "Базовый", "price": 1000, "currency": "USD", "students": 3,
+    }).json()["id"]
+    assert client.patch(f"/api/course/tariffs/{tid}", json={"students": -2}).status_code == 422
+
+    assert client.post("/api/course/costs", json={
+        "name": "Странный расход", "amount": 100, "currency": "USD", "kind": "weekly",
+    }).status_code == 422
+    cid = client.post("/api/course/costs", json={
+        "name": "Реклама", "amount": 100, "currency": "USD", "kind": "monthly",
+    }).json()["id"]
+    assert client.patch(f"/api/course/costs/{cid}", json={"kind": "sometimes"}).status_code == 422
+
+    assert client.patch("/api/course/config", json={"cohort_months": 0}).status_code == 422
+    assert client.patch("/api/course/config", json={"cohort_months": None}).status_code == 422
+
+
+def test_settings_reject_negative_cashflow_assumptions(client):
+    assert client.patch("/api/settings", json={"cushion": -1}).status_code == 422
+    assert client.patch("/api/settings", json={"manual_burn_weekly": -1}).status_code == 422
+    assert client.patch("/api/settings", json={"manual_burn_weekly": None}).status_code == 200
+
+
+def test_patch_null_rejects_non_nullable_fields(client):
+    ob = client.post("/api/obligations", json={
+        "name": "Аренда", "amount": 1000, "currency": "USD",
+        "due_date": TODAY.isoformat(), "recurrence": "monthly",
+    }).json()["id"]
+    assert client.patch(f"/api/obligations/{ob}", json={"amount": None}).status_code == 422
+    assert client.get("/api/obligations").json()[0]["amount"] == pytest.approx(1000.0)
+
+    inflow = client.post("/api/inflows", json={
+        "amount": 500, "currency": "USD", "expected_date": TODAY.isoformat(),
+    }).json()["id"]
+    assert client.patch(f"/api/inflows/{inflow}", json={"currency": None}).status_code == 422
+    assert client.get("/api/inflows").json()[0]["currency"] == "USD"
+
+    wish = client.post("/api/wishes", json={
+        "name": "Камера", "amount": 300, "currency": "USD", "priority": "medium",
+    }).json()["id"]
+    assert client.patch(f"/api/wishes/{wish}", json={"priority": None}).status_code == 422
+    assert client.get("/api/wishes").json()["items"][0]["priority"] == "medium"
+
+
 # ---------- spa shell caching ----------
 
 def test_spa_index_is_no_cache(client):
@@ -785,6 +857,20 @@ def test_spa_index_is_no_cache(client):
     if not dist.is_dir():
         pytest.skip("web/dist не собран (в CI тесты идут до npm run build)")
     r = client.get("/")
+    assert r.status_code == 200
+    assert "no-cache" in r.headers.get("cache-control", "")
+
+
+def test_spa_mount_tolerates_dist_without_assets(tmp_path):
+    """Во время `vite build` dist может уже существовать, а dist/assets ещё нет.
+    App factory не должен падать в этот короткий промежуток."""
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><div id='root'></div>", encoding="utf-8")
+
+    app = create_app(database_url="sqlite://", fx_autofetch=False, seed=False, static_dist=str(dist))
+    with TestClient(app) as c:
+        r = c.get("/")
     assert r.status_code == 200
     assert "no-cache" in r.headers.get("cache-control", "")
 

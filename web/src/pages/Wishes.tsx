@@ -461,7 +461,7 @@ function ListRow({ w, cur, verdict, onWhen, onEdit, onDelete }: {
   const when = whenTypeOf(w.target_date)
   const src = w.image_url || fallbackImage(w.category, w.name)
   return (
-    <div className="group relative mx-1 grid grid-cols-[minmax(0,1fr)_130px_170px_120px] items-center gap-4 rounded-[10px] px-4 py-3 transition-colors hover:bg-card-2 [&+&]:shadow-[inset_0_1px_0_var(--line-2)]">
+    <div className="group relative mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-[10px] px-4 py-3 transition-colors hover:bg-card-2 sm:grid-cols-[minmax(0,1fr)_130px_170px_120px] [&+&]:shadow-[inset_0_1px_0_var(--line-2)]">
       <div className="flex min-w-0 items-center gap-3">
         {src ? (
           <img src={src} alt="" className="size-10 shrink-0 border border-border object-cover" />
@@ -485,13 +485,13 @@ function ListRow({ w, cur, verdict, onWhen, onEdit, onDelete }: {
       </div>
       <span className="text-[13px] text-ink-2">{PRIORITY.find((p) => p.value === w.priority)?.label}</span>
 
-      <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 bg-gradient-to-l from-card-2 from-70% to-transparent pl-8 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="col-span-full flex items-center justify-end gap-1 border-t border-line-2 pt-3 opacity-100 transition-opacity sm:pointer-events-none sm:absolute sm:right-3 sm:top-1/2 sm:col-span-auto sm:-translate-y-1/2 sm:border-t-0 sm:bg-gradient-to-l sm:from-card-2 sm:from-70% sm:to-transparent sm:pl-8 sm:pt-0 sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100">
         <button
-          onClick={onEdit} title="Картинка и формат"
+          onClick={onEdit} aria-label="Редактировать картинку и формат желания" title="Картинка и формат"
           className="grid size-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground"
         ><Pencil className="size-[15px]" /></button>
         <button
-          onClick={onDelete} title="Удалить"
+          onClick={onDelete} aria-label="Удалить желание" title="Удалить"
           className="grid size-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg"
         ><Trash2 className="size-[15px]" /></button>
       </div>
@@ -556,20 +556,20 @@ function WishCard({
           />
         )}
 
-        <div className="absolute right-2.5 top-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="absolute right-2.5 top-2.5 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100">
           <button
-            onClick={onEdit} title="Картинка и формат карточки"
+            onClick={onEdit} aria-label="Редактировать картинку и формат карточки" title="Картинка и формат карточки"
             className="grid h-8 w-8 place-items-center rounded-full board-glass text-sm text-white hover:bg-white/20"
           ><Pencil className="size-[15px]" /></button>
         </div>
 
-        <div className="absolute left-2.5 top-2.5 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="absolute left-2.5 top-2.5 flex gap-1 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100">
           <button
-            onClick={() => onMove("up")} disabled={index === 0} title="Поднять выше"
+            onClick={() => onMove("up")} disabled={index === 0} aria-label="Поднять желание выше" title="Поднять выше"
             className="grid h-8 w-8 place-items-center rounded-full board-glass text-sm text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30"
           >↑</button>
           <button
-            onClick={() => onMove("down")} disabled={index === total - 1} title="Опустить ниже"
+            onClick={() => onMove("down")} disabled={index === total - 1} aria-label="Опустить желание ниже" title="Опустить ниже"
             className="grid h-8 w-8 place-items-center rounded-full board-glass text-sm text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30"
           >↓</button>
         </div>
@@ -655,7 +655,7 @@ function WishForm({ cur, onClose, onSaved }: {
           <div className="grid grid-cols-[1fr_130px] gap-3">
             <Field label="Стоимость">
               <Input value={amount} onChange={(e) => setAmount(e.target.value)}
-                type="number" step="any" placeholder="0" required className="tabular-nums" />
+                type="number" step="any" min="0.01" placeholder="0" required className="tabular-nums" />
             </Field>
             <Field label="Валюта">
               <CurrencySelect value={currency} onChange={setCurrency} />

@@ -4,13 +4,15 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 # Денежные суммы строго положительны: отрицательное обязательство = фантомный доход (#12).
 Amount = Annotated[float, Field(gt=0)]
+NonNegativeAmount = Annotated[float, Field(ge=0)]
+NonNegativeInt = Annotated[int, Field(ge=0)]
 # Длины строк держим в паритете с колонками БД (SQLite не enforce-ит, Postgres рубит → 500).
 # Отдаём 422 на обоих бэкендах вместо StringDataRightTruncation (#13/#18/#19).
-Currency = Annotated[str, Field(min_length=1, max_length=12)]
+Currency = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
 Name80 = Annotated[str, Field(max_length=80)]
 Name120 = Annotated[str, Field(max_length=120)]
 Note = Annotated[str, Field(max_length=300)]
@@ -19,6 +21,8 @@ ImageUrl = Annotated[str, Field(max_length=500)]
 ImageSource = Annotated[str, Field(max_length=40)]
 # Горизонт планирования — тот же диапазон, что и Query у /forecast (#11).
 HorizonDays = Annotated[int, Field(ge=7, le=730)]
+CourseMonths = Annotated[int, Field(ge=1)]
+AccountType = Literal["bank", "cash", "broker", "crypto"]
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -79,14 +83,14 @@ def require_token(request: Request):
 class AccountIn(BaseModel):
     name: Name80
     currency: Currency
-    type: str = "bank"
+    type: AccountType = "bank"
     sort_order: int = 0
 
 
 class AccountPatch(BaseModel):
     name: Name80 | None = None
     currency: Currency | None = None
-    type: str | None = None
+    type: AccountType | None = None
     is_active: bool | None = None
     sort_order: int | None = None
 
@@ -108,6 +112,14 @@ InflowStatus = Literal["expected", "received", "lost"]
 WishPriority = Literal["high", "medium", "low"]
 WishStatus = Literal["active", "bought", "dropped"]
 CardSize = Literal["small", "square", "tall", "wide", "large", "auto"]
+CourseCostKind = Literal["monthly", "per_student"]
+
+
+def _reject_nulls(data: dict, fields: set[str]):
+    """PATCH принимает explicit null только для nullable-полей; non-null ловим до БД."""
+    for field in fields:
+        if field in data and data[field] is None:
+            raise HTTPException(status_code=422, detail=f"{field} must not be null")
 
 
 class ObligationIn(BaseModel):
@@ -210,9 +222,9 @@ class IncomeIn(BaseModel):
 
 class SettingsPatch(BaseModel):
     base_currency: Currency | None = None
-    cushion: float | None = None
+    cushion: NonNegativeAmount | None = None
     horizon_days: HorizonDays | None = None
-    manual_burn_weekly: float | None = None
+    manual_burn_weekly: NonNegativeAmount | None = None
     display_name: Name120 | None = None
 
 
@@ -226,7 +238,7 @@ class CourseTariffIn(BaseModel):
     name: Name80
     price: Amount
     currency: Currency
-    students: int = 0
+    students: NonNegativeInt = 0
     sort_order: int = 0
 
 
@@ -234,7 +246,7 @@ class CourseTariffPatch(BaseModel):
     name: Name80 | None = None
     price: Amount | None = None
     currency: Currency | None = None
-    students: int | None = None
+    students: NonNegativeInt | None = None
     sort_order: int | None = None
 
 
@@ -242,7 +254,7 @@ class CourseCostIn(BaseModel):
     name: Name80
     amount: Amount
     currency: Currency
-    kind: str = "monthly"  # monthly | per_student
+    kind: CourseCostKind = "monthly"  # monthly | per_student
     sort_order: int = 0
 
 
@@ -250,12 +262,12 @@ class CourseCostPatch(BaseModel):
     name: Name80 | None = None
     amount: Amount | None = None
     currency: Currency | None = None
-    kind: str | None = None
+    kind: CourseCostKind | None = None
     sort_order: int | None = None
 
 
 class CourseConfigPatch(BaseModel):
-    cohort_months: int | None = None
+    cohort_months: CourseMonths | None = None
 
 
 def dec(v: float) -> Decimal:
@@ -289,7 +301,9 @@ def patch_account(acc_id: int, body: AccountPatch, db: Session = Depends(get_db)
     if a is None:
         raise HTTPException(404, f"unknown account {acc_id}")
     # exclude_unset (не exclude_none): явный null очищает nullable-поле, а не молча отбрасывается (#14)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"name", "currency", "type", "is_active", "sort_order"})
+    for field, value in data.items():
         setattr(a, field, value.upper() if field == "currency" and value is not None else value)
     db.commit()
     return {"ok": True}
@@ -418,6 +432,7 @@ def patch_obligation(ob_id: int, body: ObligationPatch, db: Session = Depends(ge
     if o is None:
         raise HTTPException(404, f"unknown obligation {ob_id}")
     data = body.model_dump(exclude_unset=True)  # явный null очищает nullable-поле (#14)
+    _reject_nulls(data, {"name", "amount", "currency", "due_date", "recurrence", "status"})
     # повторяющееся + «оплачено» → не закрываем серию, а двигаем на следующий платёж
     if data.get("status") == "paid" and o.recurrence != "once":
         # Следующее наступление on-or-after сегодня — это и есть следующий платёж.
@@ -535,7 +550,9 @@ def patch_course_tariff(tariff_id: int, body: CourseTariffPatch, db: Session = D
     t = db.get(CourseTariff, tariff_id)
     if t is None:
         raise HTTPException(404, f"unknown course tariff {tariff_id}")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"name", "price", "currency", "students", "sort_order"})
+    for field, value in data.items():
         if field == "price" and value is not None:
             value = dec(value)
         if field == "currency" and value is not None:
@@ -571,7 +588,9 @@ def patch_course_cost(cost_id: int, body: CourseCostPatch, db: Session = Depends
     c = db.get(CourseCost, cost_id)
     if c is None:
         raise HTTPException(404, f"unknown course cost {cost_id}")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"name", "amount", "currency", "kind", "sort_order"})
+    for field, value in data.items():
         if field == "amount" and value is not None:
             value = dec(value)
         if field == "currency" and value is not None:
@@ -594,9 +613,10 @@ def delete_course_cost(cost_id: int, db: Session = Depends(get_db)):
 @router.patch("/course/config", dependencies=[Depends(require_token)])
 def patch_course_config(body: CourseConfigPatch, db: Session = Depends(get_db)):
     cfg = get_course_config(db)
-    data = body.model_dump(exclude_none=True)
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"cohort_months"})
     if "cohort_months" in data:
-        cfg.cohort_months = max(1, data["cohort_months"])
+        cfg.cohort_months = data["cohort_months"]
     db.commit()
     return {"ok": True}
 
@@ -675,7 +695,9 @@ def patch_wish(wish_id: int, body: WishPatch, db: Session = Depends(get_db)):
     w = db.get(Wish, wish_id)
     if w is None:
         raise HTTPException(404, f"unknown wish {wish_id}")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"name", "amount", "currency", "priority", "status"})
+    for field, value in data.items():
         if field == "amount" and value is not None:
             value = dec(value)
         if field == "currency" and value is not None:
@@ -765,7 +787,9 @@ def patch_inflow(inf_id: int, body: InflowPatch, db: Session = Depends(get_db)):
     i = db.get(InflowRow, inf_id)
     if i is None:
         raise HTTPException(404, f"unknown inflow {inf_id}")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"name", "amount", "currency", "expected_date", "probability", "recurrence", "status"})
+    for field, value in data.items():
         if field == "amount" and value is not None:
             value = dec(value)
         if field == "currency" and value is not None:
@@ -803,6 +827,7 @@ def read_settings(db: Session = Depends(get_db)):
 def patch_settings(body: SettingsPatch, db: Session = Depends(get_db)):
     s = get_settings(db)
     data = body.model_dump(exclude_unset=True)  # явный null очищает поле (#14)
+    _reject_nulls(data, {"base_currency", "cushion", "horizon_days"})
     if data.get("base_currency"):
         new_base = data["base_currency"].upper()
         if new_base != s.base_currency:

@@ -43,6 +43,11 @@ const GRID =
   "grid items-center gap-x-3.5 " +
   "grid-cols-[40px_minmax(0,1fr)_158px] " +
   "lg:grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px]"
+const ACTION_RAIL =
+  "col-span-full mt-3 flex flex-wrap items-center justify-end gap-1 border-t border-line-2 pt-3 opacity-100 " +
+  "lg:pointer-events-none lg:absolute lg:right-3.5 lg:top-1/2 lg:mt-0 lg:-translate-y-1/2 " +
+  "lg:border-t-0 lg:bg-gradient-to-r lg:from-transparent lg:via-card-2 lg:to-card-2 lg:pl-9 lg:pt-0 " +
+  "lg:opacity-0 lg:transition-opacity lg:group-hover:pointer-events-auto lg:group-hover:opacity-100"
 
 // ───────────────────────────── icons ───────────────────────────────────────
 
@@ -267,30 +272,29 @@ function ReadRow({ i, base, conv, onEdit, onMark, onLost, onReturn, onDelete }: 
         )}
       </span>
 
-      {/* hover actions */}
-      <div className="pointer-events-none absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center gap-1 bg-gradient-to-r from-transparent via-card-2 to-card-2 pl-9 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-        <button onClick={onEdit} title="Редактировать"
+      <div className={ACTION_RAIL} aria-label="Действия с доходом">
+        <button onClick={onEdit} aria-label="Редактировать доход" title="Редактировать"
           className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
           <IcEdit className="h-[15px] w-[15px]" />
         </button>
         {i.status === "expected" ? (
           <>
-            <button onClick={onMark}
+            <button onClick={onMark} aria-label="Отметить доход полученным"
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos">
               <IcCheck className="h-[14px] w-[14px]" />Получено
             </button>
-            <button onClick={onLost} title="Не пришло"
+            <button onClick={onLost} aria-label="Отметить доход потерянным" title="Не пришло"
               className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
               ✕
             </button>
           </>
         ) : (
-          <button onClick={onReturn}
+          <button onClick={onReturn} aria-label="Вернуть доход в ожидаемые"
             className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
             Вернуть
           </button>
         )}
-        <button onClick={onDelete} title="Удалить"
+        <button onClick={onDelete} aria-label="Удалить доход" title="Удалить"
           className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg">
           <IcTrash className="h-[15px] w-[15px]" />
         </button>
@@ -353,6 +357,9 @@ function InlineForm({ kind, state, set, directions, onSubmit, onCancel, onDelete
       {/* сумма + валюта */}
       <div className="flex min-w-0 items-center gap-1.5">
         <Input
+          type="number"
+          step="any"
+          min="0.01"
           inputMode="decimal"
           value={state.amount}
           onChange={(e) => set("amount", e.target.value)}

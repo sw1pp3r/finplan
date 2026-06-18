@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import type { ReactElement } from "react"
 import { fixtureFor } from "./fixtures"
@@ -79,6 +79,29 @@ describe("страницы рендерятся с замоканным API бе
     const { default: Settings } = await import("@/pages/Settings")
     renderAt(<Settings />, "/settings")
     expect(await screen.findByText("Настройки")).toBeInTheDocument()
+  })
+})
+
+describe("интерфейсные регрессии аудита", () => {
+  it("Расходы дают row-actions с конкретными accessible names", async () => {
+    const { default: Plans } = await import("@/pages/Plans")
+    renderAt(<Plans />, "/expenses")
+    await screen.findByText("Расходы")
+    expect((await screen.findAllByRole("button", { name: "Редактировать расход" })).length).toBeGreaterThan(0)
+    expect((await screen.findAllByRole("button", { name: "Удалить расход" })).length).toBeGreaterThan(0)
+  })
+
+  it("Курс не даёт сохранить новый тариф с пустой ценой", async () => {
+    const { default: Course } = await import("@/pages/Course")
+    renderAt(<Course />, "/more")
+    await waitFor(() => expect(getCalls).toContain("/course"))
+
+    fireEvent.click(screen.getByRole("button", { name: /Добавить тариф/ }))
+    const save = screen.getByRole("button", { name: "Сохранить" })
+    expect(save).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText("Цена"), { target: { value: "100" } })
+    expect(save).not.toBeDisabled()
   })
 })
 
