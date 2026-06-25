@@ -8,3 +8,6 @@ web/node_modules/
 web/dist/
 *.log
 wish-images/
+.claude/
+designs/.thumbnail
+_oss_publish_memory.md
