@@ -160,6 +160,49 @@ export type Course = {
   missing_rates: string[]
 }
 
+export type ServiceListItem = { id: number; name: string; note: string | null }
+
+export type ServiceTariffRow = {
+  id: number
+  name: string
+  price: number
+  currency: string
+  clients: number
+  is_byo: boolean
+  usage: Record<string, number> // cost_id -> юнитов/клиента/мес
+  mrr_base: number
+  var_cost_base: number
+  net_per_client: number
+}
+
+export type ServiceCostRow = {
+  id: number
+  name: string
+  amount: number
+  currency: string
+  kind: "fixed" | "per_client" | "per_unit"
+  unit_label: string | null
+  unit_size: number
+}
+
+export type ServiceSummary = {
+  service: { id: number; name: string; note: string | null }
+  base_currency: string
+  mrr: number
+  fixed_monthly: number
+  per_client_monthly: number
+  per_unit_monthly: number
+  cogs_monthly: number
+  net_monthly: number
+  margin_pct: number | null
+  clients_total: number
+  required_monthly_income: number
+  net_vs_required: number
+  missing_rates: string[]
+  tariffs: ServiceTariffRow[]
+  costs: ServiceCostRow[]
+}
+
 export type LastSnapshot = {
   taken_at: string | null
   items: { account_id: number; account: string; currency: string; amount: number }[]

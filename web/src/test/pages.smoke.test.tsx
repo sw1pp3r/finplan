@@ -91,17 +91,17 @@ describe("интерфейсные регрессии аудита", () => {
     expect((await screen.findAllByRole("button", { name: "Удалить расход" })).length).toBeGreaterThan(0)
   })
 
-  it("Курс не даёт сохранить новый тариф с пустой ценой", async () => {
+  it("Курс: «+ тариф» сразу создаёт строку с валидной ценой (> 0)", async () => {
+    const { api } = await import("@/lib/api")
     const { default: Course } = await import("@/pages/Course")
     renderAt(<Course />, "/more")
     await waitFor(() => expect(getCalls).toContain("/course"))
 
-    fireEvent.click(screen.getByRole("button", { name: /Добавить тариф/ }))
-    const save = screen.getByRole("button", { name: "Сохранить" })
-    expect(save).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText("Цена"), { target: { value: "100" } })
-    expect(save).not.toBeDisabled()
+    fireEvent.click(screen.getByRole("button", { name: "Добавить тариф" }))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      "/course/tariffs",
+      expect.objectContaining({ price: 100, students: 0 }),
+    ))
   })
 })
 

@@ -340,6 +340,76 @@ def course_summary(db: Session):
     }
 
 
+def service_summary_payload(db: Session, service_id: int):
+    """Юнит-экономика одного сервиса + сравнение с breakeven. Прогноз не трогаем."""
+    from .db import Service, ServiceCost, ServiceTariff, ServiceTariffUsage
+    from .services_econ import SvcCost, SvcTariff, compute_service
+
+    svc = db.get(Service, service_id)
+    if svc is None:
+        return None
+    settings = get_settings(db)
+    rates, _ = get_rates(db, settings.base_currency)
+
+    cost_rows = db.scalars(select(ServiceCost).where(ServiceCost.service_id == service_id)
+                           .order_by(ServiceCost.sort_order, ServiceCost.id)).all()
+    tariff_rows = db.scalars(select(ServiceTariff).where(ServiceTariff.service_id == service_id)
+                             .order_by(ServiceTariff.sort_order, ServiceTariff.id)).all()
+    tariff_ids = [t.id for t in tariff_rows]
+    usage_rows = db.scalars(select(ServiceTariffUsage)
+                            .where(ServiceTariffUsage.tariff_id.in_(tariff_ids))).all() if tariff_ids else []
+    usage_by_tariff: dict[int, dict[int, Decimal]] = {}
+    for u in usage_rows:
+        usage_by_tariff.setdefault(u.tariff_id, {})[u.cost_id] = Decimal(u.units_per_client_month)
+
+    res = compute_service(
+        tariffs=[SvcTariff(t.name, Decimal(t.price), t.currency, t.clients, t.is_byo,
+                           usage_by_tariff.get(t.id, {})) for t in tariff_rows],
+        costs=[SvcCost(c.id, c.name, Decimal(c.amount), c.currency, c.kind, c.unit_size)
+               for c in cost_rows],
+        rates=rates,
+    )
+
+    forecast, fc_settings, _ = forecast_from_db(db)
+    exp = expenses_summary(db, precomputed=(forecast, fc_settings))
+    required = exp["required_monthly_income"]
+
+    cur_used = {t.currency for t in tariff_rows} | {c.currency for c in cost_rows}
+    missing_rates = sorted(c for c in cur_used if c not in rates)
+
+    tariffs = []
+    for row, bt in zip(tariff_rows, res.by_tariff):
+        tariffs.append({
+            "id": row.id, "name": row.name, "price": float(row.price),
+            "currency": row.currency, "clients": row.clients, "is_byo": row.is_byo,
+            "usage": {cid: float(u) for cid, u in usage_by_tariff.get(row.id, {}).items()},
+            "mrr_base": float(bt["mrr_base"]), "var_cost_base": float(bt["var_cost_base"]),
+            "net_per_client": float(bt["net_per_client"]),
+        })
+    costs = [{
+        "id": c.id, "name": c.name, "amount": float(c.amount), "currency": c.currency,
+        "kind": c.kind, "unit_label": c.unit_label, "unit_size": c.unit_size,
+    } for c in cost_rows]
+
+    return {
+        "service": {"id": svc.id, "name": svc.name, "note": svc.note},
+        "base_currency": settings.base_currency,
+        "mrr": float(res.mrr),
+        "fixed_monthly": float(res.fixed_monthly),
+        "per_client_monthly": float(res.per_client_monthly),
+        "per_unit_monthly": float(res.per_unit_monthly),
+        "cogs_monthly": float(res.cogs_monthly),
+        "net_monthly": float(res.net_monthly),
+        "margin_pct": float(res.margin_pct) if res.margin_pct is not None else None,
+        "clients_total": res.clients_total,
+        "required_monthly_income": required,
+        "net_vs_required": float(res.net_monthly) - required,
+        "missing_rates": missing_rates,
+        "tariffs": tariffs,
+        "costs": costs,
+    }
+
+
 def forecast_from_db(db: Session, today: date | None = None, horizon_days: int | None = None):
     today = today or date.today()
     settings = get_settings(db)

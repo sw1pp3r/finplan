@@ -29,13 +29,14 @@ from sqlalchemy.orm import Session
 from . import images
 from .db import (
     Account, Category, CourseConfigRow, CourseCost, CourseTariff, Direction, FxRate,
-    InflowRow, ObligationRow, SnapshotRow, Wish,
+    InflowRow, ObligationRow, Service, ServiceCost, ServiceTariff, ServiceTariffUsage,
+    SnapshotRow, Wish,
 )
 from .forecast import next_period
 from .service import (
     course_summary, expenses_summary, forecast_from_db, get_course_config, get_settings,
-    income_summary, rates_overview, rebase_currency, snapshots_history, upsert_snapshot,
-    wishes_summary,
+    income_summary, rates_overview, rebase_currency, service_summary_payload,
+    snapshots_history, upsert_snapshot, wishes_summary,
 )
 
 
@@ -113,6 +114,9 @@ WishPriority = Literal["high", "medium", "low"]
 WishStatus = Literal["active", "bought", "dropped"]
 CardSize = Literal["small", "square", "tall", "wide", "large", "auto"]
 CourseCostKind = Literal["monthly", "per_student"]
+ServiceCostKind = Literal["fixed", "per_client", "per_unit"]
+UnitLabel = Annotated[str, Field(max_length=40)]
+UnitSize = Annotated[int, Field(ge=1)]
 
 
 def _reject_nulls(data: dict, fields: set[str]):
@@ -268,6 +272,57 @@ class CourseCostPatch(BaseModel):
 
 class CourseConfigPatch(BaseModel):
     cohort_months: CourseMonths | None = None
+
+
+class ServiceIn(BaseModel):
+    name: Name80
+    note: Note | None = None
+    preset: str | None = None
+
+
+class ServicePatch(BaseModel):
+    name: Name80 | None = None
+    note: Note | None = None
+
+
+class ServiceTariffIn(BaseModel):
+    name: Name80
+    price: Amount
+    currency: Currency
+    clients: NonNegativeInt = 0
+    is_byo: bool = False
+    sort_order: int = 0
+    usage: dict[int, float] | None = None  # cost_id -> юнитов/клиента/мес
+
+
+class ServiceTariffPatch(BaseModel):
+    name: Name80 | None = None
+    price: Amount | None = None
+    currency: Currency | None = None
+    clients: NonNegativeInt | None = None
+    is_byo: bool | None = None
+    sort_order: int | None = None
+    usage: dict[int, float] | None = None
+
+
+class ServiceCostIn(BaseModel):
+    name: Name80
+    amount: Amount
+    currency: Currency
+    kind: ServiceCostKind = "fixed"
+    unit_label: UnitLabel | None = None
+    unit_size: UnitSize = 1
+    sort_order: int = 0
+
+
+class ServiceCostPatch(BaseModel):
+    name: Name80 | None = None
+    amount: Amount | None = None
+    currency: Currency | None = None
+    kind: ServiceCostKind | None = None
+    unit_label: UnitLabel | None = None
+    unit_size: UnitSize | None = None
+    sort_order: int | None = None
 
 
 def dec(v: float) -> Decimal:
@@ -617,6 +672,188 @@ def patch_course_config(body: CourseConfigPatch, db: Session = Depends(get_db)):
     _reject_nulls(data, {"cohort_months"})
     if "cohort_months" in data:
         cfg.cohort_months = data["cohort_months"]
+    db.commit()
+    return {"ok": True}
+
+
+# ---------- services: песочница юнит-экономики ----------
+
+def _get_service(db: Session, service_id: int) -> Service:
+    svc = db.get(Service, service_id)
+    if svc is None:
+        raise HTTPException(404, f"unknown service {service_id}")
+    return svc
+
+
+def _set_usage(db: Session, tariff: ServiceTariff, usage: dict[int, float]):
+    """Полная замена матрицы потребления тарифа; cost_id валидируем по сервису."""
+    valid_ids = set(db.scalars(select(ServiceCost.id).where(
+        ServiceCost.service_id == tariff.service_id)).all())
+    unknown = set(usage) - valid_ids
+    if unknown:
+        raise HTTPException(422, f"unknown cost ids for usage: {sorted(unknown)}")
+    # Validate all units BEFORE deleting existing rows
+    for cost_id, units in usage.items():
+        if units < 0:
+            raise HTTPException(422, "usage units must be >= 0")
+    # Delete existing usage only after validation passes
+    for row in db.scalars(select(ServiceTariffUsage).where(
+            ServiceTariffUsage.tariff_id == tariff.id)).all():
+        db.delete(row)
+    # Add new usage rows
+    for cost_id, units in usage.items():
+        db.add(ServiceTariffUsage(tariff_id=tariff.id, cost_id=cost_id,
+                                  units_per_client_month=dec(units)))
+
+
+@router.get("/services", dependencies=[Depends(require_token)])
+def list_services(db: Session = Depends(get_db)):
+    rows = db.scalars(select(Service).order_by(Service.id)).all()
+    return [{"id": s.id, "name": s.name, "note": s.note} for s in rows]
+
+
+@router.post("/services", status_code=201, dependencies=[Depends(require_token)])
+def create_service(body: ServiceIn, db: Session = Depends(get_db)):
+    if body.preset is not None:
+        from .service_presets import PRESETS, apply_preset
+        if body.preset not in PRESETS:
+            raise HTTPException(404, f"unknown preset {body.preset}")
+        svc = apply_preset(db, body.preset)
+        if body.name:
+            svc.name = body.name
+        if body.note is not None:
+            svc.note = body.note
+    else:
+        svc = Service(name=body.name, note=body.note)
+        db.add(svc)
+    db.commit()
+    return {"id": svc.id}
+
+
+@router.patch("/services/{service_id}", dependencies=[Depends(require_token)])
+def patch_service(service_id: int, body: ServicePatch, db: Session = Depends(get_db)):
+    svc = _get_service(db, service_id)
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"name"})
+    for field, value in data.items():
+        setattr(svc, field, value)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/services/{service_id}", dependencies=[Depends(require_token)])
+def delete_service(service_id: int, db: Session = Depends(get_db)):
+    svc = _get_service(db, service_id)
+    tariff_ids = db.scalars(select(ServiceTariff.id).where(
+        ServiceTariff.service_id == service_id)).all()
+    if tariff_ids:
+        for u in db.scalars(select(ServiceTariffUsage).where(
+                ServiceTariffUsage.tariff_id.in_(tariff_ids))).all():
+            db.delete(u)
+    for t in db.scalars(select(ServiceTariff).where(ServiceTariff.service_id == service_id)).all():
+        db.delete(t)
+    for c in db.scalars(select(ServiceCost).where(ServiceCost.service_id == service_id)).all():
+        db.delete(c)
+    db.delete(svc)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/services/{service_id}/summary", dependencies=[Depends(require_token)])
+def service_summary(service_id: int, db: Session = Depends(get_db)):
+    payload = service_summary_payload(db, service_id)
+    if payload is None:
+        raise HTTPException(404, f"unknown service {service_id}")
+    return payload
+
+
+@router.post("/services/{service_id}/tariffs", status_code=201, dependencies=[Depends(require_token)])
+def create_service_tariff(service_id: int, body: ServiceTariffIn, db: Session = Depends(get_db)):
+    _get_service(db, service_id)
+    t = ServiceTariff(service_id=service_id, name=body.name, price=dec(body.price),
+                      currency=body.currency.upper(), clients=body.clients,
+                      is_byo=body.is_byo, sort_order=body.sort_order)
+    db.add(t)
+    db.flush()
+    if body.usage is not None:
+        _set_usage(db, t, body.usage)
+    db.commit()
+    return {"id": t.id}
+
+
+@router.patch("/services/{service_id}/tariffs/{tariff_id}", dependencies=[Depends(require_token)])
+def patch_service_tariff(service_id: int, tariff_id: int, body: ServiceTariffPatch,
+                         db: Session = Depends(get_db)):
+    t = db.get(ServiceTariff, tariff_id)
+    if t is None or t.service_id != service_id:
+        raise HTTPException(404, f"unknown service tariff {tariff_id}")
+    data = body.model_dump(exclude_unset=True)
+    usage = data.pop("usage", None)
+    _reject_nulls(data, {"name", "price", "currency", "clients", "is_byo", "sort_order"})
+    for field, value in data.items():
+        if field == "price" and value is not None:
+            value = dec(value)
+        if field == "currency" and value is not None:
+            value = value.upper()
+        setattr(t, field, value)
+    if usage is not None:
+        _set_usage(db, t, usage)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/services/{service_id}/tariffs/{tariff_id}", dependencies=[Depends(require_token)])
+def delete_service_tariff(service_id: int, tariff_id: int, db: Session = Depends(get_db)):
+    t = db.get(ServiceTariff, tariff_id)
+    if t is None or t.service_id != service_id:
+        raise HTTPException(404, f"unknown service tariff {tariff_id}")
+    for u in db.scalars(select(ServiceTariffUsage).where(
+            ServiceTariffUsage.tariff_id == tariff_id)).all():
+        db.delete(u)
+    db.delete(t)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/services/{service_id}/costs", status_code=201, dependencies=[Depends(require_token)])
+def create_service_cost(service_id: int, body: ServiceCostIn, db: Session = Depends(get_db)):
+    _get_service(db, service_id)
+    c = ServiceCost(service_id=service_id, name=body.name, amount=dec(body.amount),
+                    currency=body.currency.upper(), kind=body.kind,
+                    unit_label=body.unit_label, unit_size=body.unit_size,
+                    sort_order=body.sort_order)
+    db.add(c)
+    db.commit()
+    return {"id": c.id}
+
+
+@router.patch("/services/{service_id}/costs/{cost_id}", dependencies=[Depends(require_token)])
+def patch_service_cost(service_id: int, cost_id: int, body: ServiceCostPatch,
+                       db: Session = Depends(get_db)):
+    c = db.get(ServiceCost, cost_id)
+    if c is None or c.service_id != service_id:
+        raise HTTPException(404, f"unknown service cost {cost_id}")
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, {"name", "amount", "currency", "kind", "unit_size", "sort_order"})
+    for field, value in data.items():
+        if field == "amount" and value is not None:
+            value = dec(value)
+        if field == "currency" and value is not None:
+            value = value.upper()
+        setattr(c, field, value)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/services/{service_id}/costs/{cost_id}", dependencies=[Depends(require_token)])
+def delete_service_cost(service_id: int, cost_id: int, db: Session = Depends(get_db)):
+    c = db.get(ServiceCost, cost_id)
+    if c is None or c.service_id != service_id:
+        raise HTTPException(404, f"unknown service cost {cost_id}")
+    for u in db.scalars(select(ServiceTariffUsage).where(
+            ServiceTariffUsage.cost_id == cost_id)).all():
+        db.delete(u)
+    db.delete(c)
     db.commit()
     return {"ok": True}
 

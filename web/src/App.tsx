@@ -16,7 +16,7 @@ import Dashboard from "@/pages/Dashboard"
 import Snapshot from "@/pages/Snapshot"
 import Plans from "@/pages/Plans"
 import Income from "@/pages/Income"
-import Course from "@/pages/Course"
+import More from "@/pages/More"
 import Wishes from "@/pages/Wishes"
 import Settings from "@/pages/Settings"
 import { cn } from "@/lib/utils"
@@ -158,7 +158,7 @@ export default function App() {
       {/* ===== sidebar (desktop) ===== */}
       <aside className="sticky top-0 hidden h-svh flex-col gap-[3px] border-r border-border bg-sidebar px-3.5 py-5 lg:flex">
         <div className="flex items-center gap-2.5 px-2 pb-5 pt-1.5">
-          <span className="grid size-[29px] place-items-center rounded-lg bg-gradient-to-br from-primary to-[var(--accent-2)] text-white shadow-sm">
+          <span className="grid size-[29px] place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
             <LineChart className="size-4" strokeWidth={2.2} />
           </span>
           <span className="text-base font-semibold tracking-tight">finplan</span>
@@ -173,7 +173,7 @@ export default function App() {
         <NavRow item={{ to: "/settings", label: "Настройки", icon: SlidersHorizontal }} />
 
         <div className="mt-1.5 flex items-center gap-3 rounded-[10px] border border-border bg-card px-2.5 py-2.5">
-          <span className="grid size-[33px] shrink-0 place-items-center rounded-[9px] bg-gradient-to-br from-primary to-[var(--accent-2)] text-[13px] font-semibold text-white">
+          <span className="grid size-[33px] shrink-0 place-items-center rounded-[9px] bg-primary text-[13px] font-semibold text-primary-foreground">
             {profileInitials(profileName)}
           </span>
           <div className="min-w-0">
@@ -229,8 +229,8 @@ export default function App() {
             <Route path="/plans" element={<Navigate to="/expenses" replace />} />
             <Route path="/wishes" element={<Wishes />} />
             <Route path="/board" element={<Navigate to="/wishes?view=board" replace />} />
-            <Route path="/more" element={showCourse ? <Course /> : <Navigate to="/" replace />} />
-            <Route path="/course" element={<Navigate to="/more" replace />} />
+            <Route path="/more/*" element={showCourse ? <More /> : <Navigate to="/" replace />} />
+            <Route path="/course" element={<Navigate to="/more/course" replace />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

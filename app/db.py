@@ -138,6 +138,50 @@ class CourseConfigRow(Base):
     cohort_months: Mapped[int] = mapped_column(default=2)  # поток раз в N месяцев
 
 
+class Service(Base):
+    """Сервис в песочнице юнит-экономики (TrendWatcher и т.п.). Прогноз не трогает."""
+    __tablename__ = "services"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+class ServiceCost(Base):
+    """Статья затрат сервиса: фикс/мес, на клиента/мес или за юнит потребления."""
+    __tablename__ = "service_costs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    currency: Mapped[str] = mapped_column(String(12))
+    kind: Mapped[str] = mapped_column(String(12), default="fixed")  # fixed | per_client | per_unit
+    unit_label: Mapped[str | None] = mapped_column(String(40), nullable=True)  # «роликов» (per_unit)
+    unit_size: Mapped[int] = mapped_column(default=1)  # цена задана за unit_size юнитов
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+
+class ServiceTariff(Base):
+    """Тариф сервиса: цена × число клиентов; BYO — клиент со своими ключами."""
+    __tablename__ = "service_tariffs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    price: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    currency: Mapped[str] = mapped_column(String(12))
+    clients: Mapped[int] = mapped_column(default=0)
+    is_byo: Mapped[bool] = mapped_column(default=False)
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+
+class ServiceTariffUsage(Base):
+    """Потребление per_unit-драйвера одним клиентом тарифа, юнитов/мес."""
+    __tablename__ = "service_tariff_usage"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tariff_id: Mapped[int] = mapped_column(ForeignKey("service_tariffs.id"), index=True)
+    cost_id: Mapped[int] = mapped_column(ForeignKey("service_costs.id"), index=True)
+    units_per_client_month: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
+
+
 def make_engine(url: str):
     if url.startswith("sqlite"):
         connect_args = {"check_same_thread": False}
