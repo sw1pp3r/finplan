@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from app.db import CourseCost, CourseTariff, FxRate, init_db, make_engine
+from app.db import CourseCost, CourseTariff, FxRate, Service, ServiceCost, ServiceTariff, init_db, make_engine
 from app.fx import _used_currencies, store_rates
 
 D = date(2026, 6, 7)
@@ -55,3 +55,17 @@ def test_used_currencies_includes_course_tariffs_and_cost(db):
     db.commit()
     used = _used_currencies(db)
     assert "KZT" in used and "EUR" in used
+
+
+def test_used_currencies_includes_service_tariffs_and_costs(db):
+    service = Service(name="TrendWatcher")
+    db.add(service)
+    db.flush()
+    db.add(ServiceTariff(service_id=service.id, name="Managed", price=Decimal("79"), currency="GBP", clients=2))
+    db.add(ServiceCost(service_id=service.id, name="Apify", amount=Decimal("3.80"), currency="CZK", kind="per_unit"))
+    db.commit()
+
+    used = _used_currencies(db)
+
+    assert "GBP" in used
+    assert "CZK" in used

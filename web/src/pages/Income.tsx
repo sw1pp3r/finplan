@@ -34,6 +34,8 @@ const PROB_STYLE = {
 const PROB_LABEL = {
   confirmed: PROB_STYLE.confirmed.label, likely: PROB_STYLE.likely.label, possible: PROB_STYLE.possible.label,
 }
+const PROB_KEYS = ["confirmed", "likely", "possible"] as const
+type ProbKey = typeof PROB_KEYS[number]
 
 const isRegular = (rec: string) => rec !== "once"
 const initials = (s: string) => (s.trim()[0] || "•").toUpperCase()
@@ -125,6 +127,80 @@ function GroupLabel({ text, n }: { text: string; n: number }) {
         {n}
       </span>
     </div>
+  )
+}
+
+function IncomeTotalDashboard({
+  data,
+  cur,
+  selected,
+  onToggle,
+}: {
+  data: IncomeData
+  cur: string
+  selected: Record<ProbKey, boolean>
+  onToggle: (p: ProbKey) => void
+}) {
+  const future = PROB_KEYS.reduce((sum, p) => sum + (selected[p] ? data.expected.by_probability[p] : 0), 0)
+  const total = data.total + future
+  return (
+    <section className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+      <div className="relative overflow-hidden rounded-lg border border-border bg-card px-6 py-5 shadow-sm">
+        <span aria-hidden className="absolute inset-y-[18px] left-0 w-[3px] rounded bg-pos" />
+        <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+          Итого с будущими
+        </span>
+        <div className="tnum mt-1.5 text-[36px] font-semibold leading-[1.05] tracking-[-0.035em]">
+          {money(total)} {cur}
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-line-2 bg-card-2 px-4 py-3">
+            <span className="text-[12px] font-medium text-ink-3">Получено</span>
+            <span className="tnum mt-1 block text-[20px] font-semibold text-pos">{money(data.total)} {cur}</span>
+          </div>
+          <div className="rounded-lg border border-line-2 bg-card-2 px-4 py-3">
+            <span className="text-[12px] font-medium text-ink-3">Будущие</span>
+            <span className="tnum mt-1 block text-[20px] font-semibold text-warn">{money(future)} {cur}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card px-5 py-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+            Вероятность будущих
+          </span>
+          <span className="tnum text-[13px] font-semibold text-ink-2">{money(future)} {cur}</span>
+        </div>
+        <div className="flex flex-col gap-2">
+          {PROB_KEYS.map((p) => {
+            const st = PROB_STYLE[p]
+            return (
+              <label key={p}
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                  selected[p] ? "border-primary/35 bg-accent-soft" : "border-border bg-card-2",
+                )}>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    aria-label={st.label}
+                    checked={selected[p]}
+                    onChange={() => onToggle(p)}
+                    className="h-4 w-4 rounded border-border accent-[var(--primary)]"
+                  />
+                  <span className="truncate text-[13px] font-medium text-foreground">{st.label}</span>
+                  <span className="text-[12px] text-ink-3">{st.pct}</span>
+                </span>
+                <span className={cn("tnum whitespace-nowrap text-[13.5px] font-semibold", st.text)}>
+                  +{money(data.expected.by_probability[p])} {cur}
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -428,6 +504,11 @@ export default function Income() {
   const [inflows, setInflows] = useState<Inflow[]>([])
   const [directions, setDirections] = useState<Ref[]>([])
   const [filter, setFilter] = useState<"all" | "expected" | "received">("all")
+  const [probFilter, setProbFilter] = useState<Record<ProbKey, boolean>>({
+    confirmed: true,
+    likely: true,
+    possible: true,
+  })
   const [adding, setAdding] = useState(false)
   const [addForm, setAddForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -517,17 +598,31 @@ export default function Income() {
     return isDir ? { counterparty: null, direction: s } : { counterparty: s, direction: null }
   }
 
+  function toggleProb(p: ProbKey) {
+    setProbFilter((prev) => ({ ...prev, [p]: !prev[p] }))
+  }
+
   async function submitAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const f = e.currentTarget
-    await api.post("/inflows", {
-      amount: Number(addForm.amount),
-      currency: addForm.currency,
-      expected_date: addForm.date,
-      probability: addForm.probability,
-      recurrence: addForm.recurrence,
-      ...sourcePayload(addForm.source),
-    })
+    const source = sourcePayload(addForm.source)
+    if (addForm.recurrence === "once" && addForm.date < todayIso()) {
+      await api.post("/income", {
+        amount: Number(addForm.amount),
+        currency: addForm.currency,
+        received_date: addForm.date,
+        ...source,
+      })
+    } else {
+      await api.post("/inflows", {
+        amount: Number(addForm.amount),
+        currency: addForm.currency,
+        expected_date: addForm.date,
+        probability: addForm.probability,
+        recurrence: addForm.recurrence,
+        ...source,
+      })
+    }
     f.reset()
     setAdding(false)
     setAddForm(EMPTY_FORM)
@@ -609,6 +704,8 @@ export default function Income() {
           <IcPlus className="h-4 w-4" />Добавить доход
         </button>
       </div>
+
+      <IncomeTotalDashboard data={data} cur={cur} selected={probFilter} onToggle={toggleProb} />
 
       {data.expected.total > 0 && (
         <PipelineTop data={data} expectedRows={expectedRows} cur={cur} regularMonthly={regularMonthly} />

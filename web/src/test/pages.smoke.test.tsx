@@ -41,7 +41,9 @@ function renderAt(el: ReactElement, path = "/") {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   getCalls.length = 0
+  localStorage.clear()
 })
 
 describe("страницы рендерятся с замоканным API без падений", () => {
@@ -75,6 +77,13 @@ describe("страницы рендерятся с замоканным API бе
     await waitFor(() => expect(getCalls).toContain("/course"))
   })
 
+  it("Ещё / Сервисы", async () => {
+    const { default: Services } = await import("@/pages/Services")
+    renderAt(<Services />, "/more/services")
+    expect(await screen.findByRole("heading", { name: /Ещё\s*\/\s*Сервисы/ })).toBeInTheDocument()
+    await waitFor(() => expect(getCalls).toContain("/services/1/summary"))
+  })
+
   it("Настройки", async () => {
     const { default: Settings } = await import("@/pages/Settings")
     renderAt(<Settings />, "/settings")
@@ -83,6 +92,17 @@ describe("страницы рендерятся с замоканным API бе
 })
 
 describe("интерфейсные регрессии аудита", () => {
+  it("скрытый Course не блокирует прямой вход в /more/services", async () => {
+    localStorage.setItem("finplan-onboarded", "1")
+    localStorage.setItem("finplan-show-course", "0")
+    const { default: App } = await import("@/App")
+    renderAt(<App />, "/more/services")
+
+    expect(await screen.findByRole("heading", { name: /Ещё\s*\/\s*Сервисы/ })).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Курс" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Дашборд" })).not.toBeInTheDocument()
+  })
+
   it("Расходы дают row-actions с конкретными accessible names", async () => {
     const { default: Plans } = await import("@/pages/Plans")
     renderAt(<Plans />, "/expenses")
@@ -122,6 +142,61 @@ describe("гриды Доходов: суммы tabular-nums", () => {
     const { container } = renderAt(<Income />, "/income")
     await screen.findAllByText(/Доходы/)
     await waitFor(() => expect(container.querySelector(".tnum")).toBeTruthy())
+  })
+})
+
+describe("Доходы: добавление прошедшего факта", () => {
+  it("прошлая дата из формы создаёт полученный доход, а не ожидаемое поступление", async () => {
+    const { api } = await import("@/lib/api")
+    const { default: Income } = await import("@/pages/Income")
+    renderAt(<Income />, "/income")
+    await screen.findAllByText(/Доходы/)
+
+    fireEvent.click(screen.getByRole("button", { name: "Добавить доход" }))
+    const amount = screen.getByPlaceholderText("0")
+    fireEvent.change(amount, { target: { value: "1200" } })
+    const date = amount.closest("form")?.querySelector<HTMLInputElement>('input[type="date"]')
+    expect(date).toBeTruthy()
+    fireEvent.change(date!, { target: { value: "2026-06-01" } })
+    fireEvent.submit(amount.closest("form")!)
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      "/income",
+      expect.objectContaining({
+        amount: 1200,
+        currency: "USD",
+        received_date: "2026-06-01",
+      }),
+    ))
+    expect(api.post).not.toHaveBeenCalledWith(
+      "/inflows",
+      expect.objectContaining({ expected_date: "2026-06-01" }),
+    )
+  })
+})
+
+describe("дашборды доходов и расходов", () => {
+  it("Расходы показывают базовые KPI по месяцу и разовым платежам", async () => {
+    const { default: Plans } = await import("@/pages/Plans")
+    renderAt(<Plans />, "/expenses")
+
+    expect(await screen.findByText("Расходы / мес")).toBeInTheDocument()
+    expect(await screen.findByText("Разовые впереди")).toBeInTheDocument()
+    expect(await screen.findByText("2 платежа вне месяца")).toBeInTheDocument()
+    expect(screen.getAllByText((c) => /5\s*400/.test(c) && c.includes("USD")).length).toBeGreaterThan(0)
+  })
+
+  it("Доходы считают полученное плюс выбранные будущие вероятности", async () => {
+    const { default: Income } = await import("@/pages/Income")
+    renderAt(<Income />, "/income")
+
+    expect(await screen.findByText("Итого с будущими")).toBeInTheDocument()
+    expect(screen.getAllByText((c) => /17\s*200/.test(c) && c.includes("USD")).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "под вопросом" }))
+    await waitFor(() =>
+      expect(screen.getAllByText((c) => /13\s*800/.test(c) && c.includes("USD")).length).toBeGreaterThan(0),
+    )
   })
 })
 

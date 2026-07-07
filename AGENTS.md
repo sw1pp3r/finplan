@@ -6,19 +6,21 @@
 
 Планировщик cash-flow, **не трекер расходов**. Нет импорта выписок, транзакционного учёта, категоризации трат. Если кто-то просит «добавить импорт банка / автокатегоризацию транзакций» — это смена природы продукта, сперва уточнить у sw1pp3r.
 
-Текущая навигация: **Дашборд** (`/`) · **Баланс** (`/balance`, бывш. Снимок; счета + снимки) · **Доходы** (`/income`, одна лента `inflows`: `expected`→`received`, пайплайн «Ожидается») · **Расходы** (`/expenses`, обязательства + «Ежемесячные расходы» с breakeven, edit/delete/status) · **Мечты** (`/wishes`, список + `?view=board` Доска; желания не влияют на прогноз до promote) · **Ещё** (`/more`, Курс; песочница тарифы − расходы → прибыль/мес, на прогноз НЕ влияет, может скрываться `finplan-show-course=0`) · **Настройки** (`/settings`, профиль/прогноз/курсы/справочники + дубль управления счетами). Старые `/snapshot`, `/plans`, `/board`, `/course` редиректятся на новые маршруты. Доска: full-bleed 12-колоночный грид, `RHYTHM` или ручной `card_size` `small`/`square`/`tall`/`wide`/`large`, Geist вместо Playfair, картинки задаются ссылкой или upload и сохраняются в `/wish-images/...` через `app/images.py` (download+save+SSRF-гард).
+Текущая навигация: **Дашборд** (`/`) · **Баланс** (`/balance`, бывш. Снимок; счета + снимки) · **Доходы** (`/income`, одна лента `inflows`: `expected`→`received`, пайплайн «Ожидается») · **Расходы** (`/expenses`, обязательства + «Ежемесячные расходы» с breakeven, edit/delete/status) · **Мечты** (`/wishes`, список + `?view=board` Доска; желания не влияют на прогноз до promote) · **Ещё** (`/more`, саб-табы **Курс** `/more/course` и **Сервисы** `/more/services`; обе песочницы на прогноз НЕ влияют) · **Настройки** (`/settings`, профиль/прогноз/курсы/справочники + дубль управления счетами). `finplan-show-course=0` скрывает только саб-таб **Курс** и редиректит `/more/course`/старый `/course` на `/more/services`; сам раздел **Ещё / Сервисы** остаётся доступным. Старые `/snapshot`, `/plans`, `/board`, `/course` редиректятся на новые маршруты. Доска: full-bleed 12-колоночный грид, `RHYTHM` или ручной `card_size` `small`/`square`/`tall`/`wide`/`large`, Geist вместо Playfair, картинки задаются ссылкой или upload и сохраняются в `/wish-images/...` через `app/images.py` (download+save+SSRF-гард).
 
 **Демо-режим:** тумблер «Демо» → заголовок `X-Demo: 1` → `get_db` отдаёт отдельную in-memory демо-БД (`app/demo.py`), реальные данные не трогаются. Учитывать при отладке: ответ API зависит от заголовка.
 
 **Дропдауны валют:** все `CurrencySelect` тянут список из `/api/rates` через хук `useKnownCurrencies` (модульный кеш + `refreshCurrencies()` после добавления курса/валюты), не из захардкоженного списка.
+
+**Services/FX:** `ServiceTariff.currency` и `ServiceCost.currency` участвуют в global FX discovery вместе с курсом/расходами/доходами/мечтами. При правках Services не возвращать старый баг, где `/api/rates` не видел валюты сервисной юнит-экономики.
 
 **Онбординг-тур (коачмарки):** на пустой БД Дашборд показывает чеклист «С чего начать», клик открывает интерактивный оверлей-тур из 5 шагов (валюта→счета→снимок→расходы→доходы; шаг «Курсы валют» убран — тянутся сами). Файлы: `web/src/lib/coach.ts` (стор + `COACH_STEPS`), `components/CoachTour.tsx` (оверлей, раскладка, движение, конфетти), `components/OnboardingChecklist.tsx`, хуки в `index.css`. Цели помечены `data-coach="…"` в страницах/компонентах (Settings/AccountsManager/Snapshot/Plans/Income) — список целей нельзя менять, не трогая те файлы. Оверлей **кликабелен насквозь** (`pointer-events:none` + `z-40` ниже дропдаунов `z-50`) — контрол заполняется прямо в туре. Полная дока: [`docs/onboarding-coachmark.md`](docs/onboarding-coachmark.md).
 
 ## Рабочий цикл (TDD обязателен для логики)
 
 ```bash
-.venv/bin/python -m pytest -q          # сейчас: 151 tests collected (forecast, course, api, fx, demo, images, audit-регрессии)
-cd web && npx vitest run               # сейчас: 6 files / 32 tests passed
+.venv/bin/python -m pytest -q          # сейчас: 167 passed (forecast, course, api, fx, demo, images, audit-регрессии)
+cd web && npx vitest run               # сейчас: 6 files / 37 tests passed
 cd web && npm run build                # пересобрать SPA перед проверкой в браузере
 ```
 

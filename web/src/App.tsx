@@ -84,7 +84,7 @@ function profileInitials(name: string): string {
 export default function App() {
   const showCourse = useShowCourse()
   const theme = useTheme()
-  const visibleNav = navMain.filter((n) => n.to !== "/more" || showCourse)
+  const visibleNav = navMain
 
   // Имя пользователя из настроек (демо → «Артём», реальная БД → заданное в Настройках).
   const [profileName, setProfileName] = useState("")
@@ -229,8 +229,8 @@ export default function App() {
             <Route path="/plans" element={<Navigate to="/expenses" replace />} />
             <Route path="/wishes" element={<Wishes />} />
             <Route path="/board" element={<Navigate to="/wishes?view=board" replace />} />
-            <Route path="/more/*" element={showCourse ? <More /> : <Navigate to="/" replace />} />
-            <Route path="/course" element={<Navigate to="/more/course" replace />} />
+            <Route path="/more/*" element={<More />} />
+            <Route path="/course" element={<Navigate to={showCourse ? "/more/course" : "/more/services"} replace />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

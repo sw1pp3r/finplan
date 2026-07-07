@@ -6,7 +6,17 @@ from decimal import Decimal
 import httpx
 from sqlalchemy import select
 
-from .db import Account, CourseCost, CourseTariff, FxRate, InflowRow, ObligationRow, Wish
+from .db import (
+    Account,
+    CourseCost,
+    CourseTariff,
+    FxRate,
+    InflowRow,
+    ObligationRow,
+    ServiceCost,
+    ServiceTariff,
+    Wish,
+)
 
 log = logging.getLogger("finplan.fx")
 
@@ -43,6 +53,8 @@ def _used_currencies(db) -> set:
     used |= set(db.scalars(select(Wish.currency).where(Wish.status == "active")).all())
     used |= set(db.scalars(select(CourseTariff.currency)).all())
     used |= set(db.scalars(select(CourseCost.currency)).all())
+    used |= set(db.scalars(select(ServiceTariff.currency)).all())
+    used |= set(db.scalars(select(ServiceCost.currency)).all())
     return used
 
 

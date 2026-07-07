@@ -131,7 +131,7 @@ function TariffsTable({ summary, onPatch, onDelete, onAdd }: {
                 <div className="flex min-w-0 items-center gap-1.5">
                   <Cell defaultValue={t.name} ariaLabel="Тариф" className="min-w-0 flex-1"
                     onCommit={(v) => onPatch(t.id, { name: v.trim() || "Тариф" })} />
-                  <label className="flex flex-none items-center gap-1 text-[10px] font-semibold text-ink-3" title="BYO — клиент со своим ключом, без COGS">
+                  <label className="flex flex-none items-center gap-1 text-[10px] font-semibold text-ink-3" title="BYO — клиент со своим ключом; fixed/per_client расходы всё равно считаются">
                     <input type="checkbox" checked={t.is_byo} aria-label="BYO"
                       onChange={(e) => onPatch(t.id, { is_byo: e.target.checked })}
                       className="h-3 w-3 rounded-sm border-border accent-primary" />

@@ -74,6 +74,38 @@ const ACTION_RAIL =
   "lg:border-t-0 lg:bg-gradient-to-l lg:from-card-2 lg:from-[28%] lg:to-transparent lg:pl-9 lg:pt-0 " +
   "lg:opacity-0 lg:transition-opacity lg:group-hover:pointer-events-auto lg:group-hover:opacity-100"
 
+function pluralRu(n: number, one: string, few: string, many: string) {
+  const mod10 = Math.abs(n) % 10
+  const mod100 = Math.abs(n) % 100
+  if (mod10 === 1 && mod100 !== 11) return one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
+  return many
+}
+
+function ExpenseKpis({ data }: { data: Expenses }) {
+  const cur = data.base_currency
+  const oneOffLabel = `${data.one_off_count} ${pluralRu(data.one_off_count, "платёж", "платежа", "платежей")} вне месяца`
+  const cards = [
+    { label: "Расходы / мес", value: data.required_monthly_income, sub: "точка нуля", tone: "text-foreground" },
+    { label: "Регулярные", value: data.monthly_obligations, sub: "платежи / мес", tone: "text-neg" },
+    { label: "Повседневные", value: data.burn_monthly, sub: "траты / мес", tone: "text-warn" },
+    { label: "Разовые впереди", value: data.one_off_total, sub: oneOffLabel, tone: "text-primary" },
+  ]
+  return (
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card) => (
+        <Card key={card.label} className="gap-2 px-5 py-4">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3">{card.label}</span>
+          <span className={cn("tnum text-[24px] font-semibold leading-none tracking-[-0.025em]", card.tone)}>
+            {money(card.value)} {cur}
+          </span>
+          <span className="text-[12.5px] text-ink-3">{card.sub}</span>
+        </Card>
+      ))}
+    </section>
+  )
+}
+
 // ── модуль «Ежемесячные расходы» + точка безубыточности ──────────────────────
 function Breakeven({ data }: { data: Expenses }) {
   const cur = data.base_currency
@@ -409,6 +441,7 @@ export default function Plans() {
         )}
       </div>
 
+      {expenses && <ExpenseKpis data={expenses} />}
       {expenses && <Breakeven data={expenses} />}
 
       <Card className="gap-0 px-2 pb-3 pt-2">
