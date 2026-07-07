@@ -11,7 +11,9 @@ from .db import (
     Account, CourseConfigRow, CourseCost, CourseTariff, FxRate, InflowRow, ObligationRow,
     SettingsRow, SnapshotRow, Wish,
 )
-from .forecast import SCENARIO_WEIGHTS, Inflow, Obligation, Snap, _occurrences, build_forecast
+from .forecast import (
+    SCENARIO_WEIGHTS, Inflow, Obligation, Snap, _derive_burn, _occurrences, build_forecast,
+)
 from .fx import _used_currencies
 
 STALE_AFTER_DAYS = 10
@@ -225,13 +227,24 @@ def expenses_summary(db: Session, precomputed=None):
     """Месячные расходы: планируемые обязательства, нормализованные в месяц, по категориям,
     + burn в месяц, + сколько нужно зарабатывать в месяц (breakeven).
     precomputed=(result, settings) переиспользует уже посчитанный прогноз (#10)."""
-    result, settings = precomputed if precomputed is not None else forecast_from_db(db)[:2]
-    rates, _ = get_rates(db, settings.base_currency)
-    rows = db.scalars(select(ObligationRow).where(ObligationRow.status == "planned")).all()
+    if precomputed is not None:
+        result, settings = precomputed
+        rates, _ = get_rates(db, settings.base_currency)
+        burn_weekly = result.burn_weekly
+        burn_source = result.burn_source
+    else:
+        settings = get_settings(db)
+        rates, _ = get_rates(db, settings.base_currency)
+        rows = db.scalars(select(ObligationRow)).all()
+        burn_weekly, burn_source = _burn_from_db(db, settings, rates, rows)
+    if precomputed is not None:
+        rows = db.scalars(select(ObligationRow)).all()
 
     by_category: dict = {}
     one_off_total, one_off_count = Decimal("0"), 0
     for o in rows:
+        if o.status != "planned":
+            continue
         base = Decimal(o.amount) * rates.get(o.currency, Decimal("0"))
         if o.recurrence == "once":
             one_off_total += base
@@ -242,12 +255,12 @@ def expenses_summary(db: Session, precomputed=None):
         by_category[cat] = by_category.get(cat, Decimal("0")) + monthly
 
     monthly_obligations = sum(by_category.values(), Decimal("0"))
-    burn_monthly = result.burn_weekly * Decimal(52) / Decimal(12)
+    burn_monthly = burn_weekly * Decimal(52) / Decimal(12)
     # Когда burn ВЫВЕДЕН из снимков, он уже вобрал реальную трату по регулярным
     # обязательствам — складывать его с monthly_obligations = двойной счёт breakeven
     # (#3/#7). Берём бóльшую из величин: и не занижаем, и не дублируем. При manual/none
     # burn (нет истории) обязательства в нём не сидят → прежняя сумма.
-    if result.burn_source == "derived":
+    if burn_source == "derived":
         required = max(monthly_obligations, burn_monthly)
     else:
         required = monthly_obligations + burn_monthly
@@ -260,6 +273,46 @@ def expenses_summary(db: Session, precomputed=None):
         "one_off_total": float(one_off_total),
         "one_off_count": one_off_count,
     }
+
+
+def _burn_from_db(
+    db: Session,
+    settings: SettingsRow,
+    rates: dict,
+    obligation_rows: list[ObligationRow],
+) -> tuple[Decimal, str]:
+    """Compute only burn rate for summaries that do not need full forecast points."""
+    accounts = {a.id: a for a in db.scalars(select(Account)).all()}
+    snapshots = db.scalars(select(SnapshotRow)).all()
+    snap_dates = sorted({s.taken_at for s in snapshots})
+    if len(snap_dates) >= 4:
+        snap_totals = {
+            d: sum(
+                (
+                    Decimal(s.amount) * rates.get(accounts[s.account_id].currency, Decimal("0"))
+                    for s in snapshots
+                    if s.taken_at == d and s.account_id in accounts
+                ),
+                Decimal("0"),
+            )
+            for d in snap_dates
+        }
+        obligations = [
+            Obligation(name=o.name, amount=Decimal(o.amount), currency=o.currency,
+                       due_date=o.due_date, recurrence=o.recurrence,
+                       recurrence_end=o.recurrence_end, status=o.status)
+            for o in obligation_rows
+        ]
+        inflows = [
+            Inflow(name=i.name, amount=Decimal(i.amount), currency=i.currency,
+                   expected_date=i.expected_date, probability=i.probability, status=i.status,
+                   recurrence=i.recurrence or "once", recurrence_end=i.recurrence_end)
+            for i in db.scalars(select(InflowRow)).all()
+        ]
+        return _derive_burn(snap_totals, obligations, inflows, rates), "derived"
+    if settings.manual_burn_weekly is not None:
+        return Decimal(settings.manual_burn_weekly), "manual"
+    return Decimal("0"), "none"
 
 
 def get_course_config(db: Session) -> CourseConfigRow:
