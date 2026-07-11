@@ -34,6 +34,7 @@ class ObligationRow(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    paid_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
     currency: Mapped[str] = mapped_column(String(12))
     due_date: Mapped[date] = mapped_column(Date)
     recurrence: Mapped[str] = mapped_column(String(10), default="once")  # once | monthly | yearly
@@ -41,6 +42,11 @@ class ObligationRow(Base):
     status: Mapped[str] = mapped_column(String(10), default="planned")  # planned | paid | cancelled
     category: Mapped[str | None] = mapped_column(String(80), nullable=True)  # категория расхода
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    @property
+    def outstanding_amount(self) -> Decimal:
+        """Неоплаченный остаток; единый источник для API, прогноза и сводок."""
+        return max(Decimal(self.amount) - Decimal(self.paid_amount or 0), Decimal("0"))
 
 
 class InflowRow(Base):
@@ -212,7 +218,10 @@ def _ensure_columns(engine):
     add_columns = {
         "inflows": {"counterparty": "VARCHAR(120)", "direction": "VARCHAR(80)",
                     "recurrence": "VARCHAR(10) DEFAULT 'once' NOT NULL", "recurrence_end": "DATE"},
-        "obligations": {"category": "VARCHAR(80)"},
+        "obligations": {
+            "category": "VARCHAR(80)",
+            "paid_amount": "NUMERIC(18, 2) DEFAULT 0 NOT NULL",
+        },
         "wishes": {"image_url": "VARCHAR(500)", "image_source": "VARCHAR(40)", "card_size": "VARCHAR(12)", "sort_order": "INTEGER DEFAULT 0"},
         "settings": {"display_name": "VARCHAR(120)"},
     }
@@ -230,9 +239,11 @@ def _ensure_columns(engine):
         # coalesce в wishes_summary (#20).
         conn.execute(text("UPDATE wishes SET sort_order = 0 WHERE sort_order IS NULL"))
         conn.execute(text("UPDATE inflows SET recurrence = 'once' WHERE recurrence IS NULL"))
+        conn.execute(text("UPDATE obligations SET paid_amount = 0 WHERE paid_amount IS NULL"))
         if is_pg:
             conn.execute(text("ALTER TABLE wishes ALTER COLUMN sort_order SET NOT NULL"))
             conn.execute(text("ALTER TABLE inflows ALTER COLUMN recurrence SET NOT NULL"))
+            conn.execute(text("ALTER TABLE obligations ALTER COLUMN paid_amount SET NOT NULL"))
             # SQLite не enforce-ит длину varchar и не умеет ALTER TYPE — расширяем только PG
             for table, col in _CURRENCY_COLUMNS.items():
                 conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {col} TYPE VARCHAR(12)"))

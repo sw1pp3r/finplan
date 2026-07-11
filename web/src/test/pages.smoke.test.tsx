@@ -71,16 +71,16 @@ describe("страницы рендерятся с замоканным API бе
     expect(await screen.findByText("Расходы")).toBeInTheDocument()
   })
 
-  it("Ещё / Курс", async () => {
+  it("Курс", async () => {
     const { default: Course } = await import("@/pages/Course")
     renderAt(<Course />, "/more")
     await waitFor(() => expect(getCalls).toContain("/course"))
   })
 
-  it("Ещё / Сервисы", async () => {
+  it("Сервисы", async () => {
     const { default: Services } = await import("@/pages/Services")
     renderAt(<Services />, "/more/services")
-    expect(await screen.findByRole("heading", { name: /Ещё\s*\/\s*Сервисы/ })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Сервисы" })).toBeInTheDocument()
     await waitFor(() => expect(getCalls).toContain("/services/1/summary"))
   })
 
@@ -92,13 +92,24 @@ describe("страницы рендерятся с замоканным API бе
 })
 
 describe("интерфейсные регрессии аудита", () => {
-  it("скрытый Course не блокирует прямой вход в /more/services", async () => {
+  it("Курс и Сервисы находятся в общем меню, а профиль ведёт в Настройки", async () => {
+    localStorage.setItem("finplan-onboarded", "1")
+    const { default: App } = await import("@/App")
+    renderAt(<App />, "/course")
+
+    expect((await screen.findAllByRole("link", { name: "Курс" })).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole("link", { name: "Сервисы" }).length).toBeGreaterThan(0)
+    expect(screen.queryAllByRole("link", { name: "Ещё" })).toHaveLength(0)
+    expect(await screen.findByRole("link", { name: "Тест Профиль" })).toHaveAttribute("href", "/settings")
+  })
+
+  it("скрытый Course не блокирует старый прямой вход в /more/services", async () => {
     localStorage.setItem("finplan-onboarded", "1")
     localStorage.setItem("finplan-show-course", "0")
     const { default: App } = await import("@/App")
     renderAt(<App />, "/more/services")
 
-    expect(await screen.findByRole("heading", { name: /Ещё\s*\/\s*Сервисы/ })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Сервисы" })).toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Курс" })).not.toBeInTheDocument()
     expect(screen.queryByRole("heading", { name: "Дашборд" })).not.toBeInTheDocument()
   })
@@ -109,6 +120,25 @@ describe("интерфейсные регрессии аудита", () => {
     await screen.findByText("Расходы")
     expect((await screen.findAllByRole("button", { name: "Редактировать расход" })).length).toBeGreaterThan(0)
     expect((await screen.findAllByRole("button", { name: "Удалить расход" })).length).toBeGreaterThan(0)
+  })
+
+  it("разовый расход можно закрыть частично из диалога оплаты", async () => {
+    const { api } = await import("@/lib/api")
+    const { default: Plans } = await import("@/pages/Plans")
+    renderAt(<Plans />, "/expenses")
+    const pay = await screen.findByRole("button", { name: "Отметить расход оплаченным" })
+
+    fireEvent.click(pay)
+    expect(screen.getByRole("dialog", { name: "Оплата расхода" })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Сумма частичной оплаты" }), {
+      target: { value: "600" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Оплатить частично" }))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      "/obligations/3/payments",
+      { amount: 600 },
+    ))
   })
 
   it("Курс: «+ тариф» сразу создаёт строку с валидной ценой (> 0)", async () => {
@@ -176,27 +206,25 @@ describe("Доходы: добавление прошедшего факта", (
 })
 
 describe("дашборды доходов и расходов", () => {
-  it("Расходы показывают базовые KPI по месяцу и разовым платежам", async () => {
+  it("Расходы не дублируют KPI и ставят breakeven слева от месячной разбивки", async () => {
     const { default: Plans } = await import("@/pages/Plans")
     renderAt(<Plans />, "/expenses")
 
-    expect(await screen.findByText("Расходы / мес")).toBeInTheDocument()
-    expect(await screen.findByText("Разовые впереди")).toBeInTheDocument()
-    expect(await screen.findByText("2 платежа вне месяца")).toBeInTheDocument()
-    expect(screen.getAllByText((c) => /5\s*400/.test(c) && c.includes("USD")).length).toBeGreaterThan(0)
+    const breakeven = await screen.findByText("Сколько нужно зарабатывать")
+    const monthly = screen.getByText("Ежемесячные расходы")
+    expect(screen.queryByText("Расходы / мес")).not.toBeInTheDocument()
+    expect(screen.queryByText("Разовые впереди")).not.toBeInTheDocument()
+    expect(breakeven.compareDocumentPosition(monthly) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it("Доходы считают полученное плюс выбранные будущие вероятности", async () => {
+  it("Доходы показывают общий итог без дублирующей плашки вероятностей", async () => {
     const { default: Income } = await import("@/pages/Income")
     renderAt(<Income />, "/income")
 
     expect(await screen.findByText("Итого с будущими")).toBeInTheDocument()
     expect(screen.getAllByText((c) => /17\s*200/.test(c) && c.includes("USD")).length).toBeGreaterThan(0)
-
-    fireEvent.click(screen.getByRole("checkbox", { name: "под вопросом" }))
-    await waitFor(() =>
-      expect(screen.getAllByText((c) => /13\s*800/.test(c) && c.includes("USD")).length).toBeGreaterThan(0),
-    )
+    expect(screen.queryByText("Вероятность будущих")).not.toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: "под вопросом" })).not.toBeInTheDocument()
   })
 })
 

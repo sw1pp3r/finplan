@@ -86,10 +86,10 @@ export const fixtures: Record<string, unknown> = {
     one_off_count: 2,
   },
   "/obligations": [
-    { id: 1, name: "Аренда", amount: 1800, currency: "USD", due_date: iso(5), recurrence: "monthly", recurrence_end: null, status: "planned", category: "Жильё", note: null },
-    { id: 2, name: "API", amount: 900, currency: "USD", due_date: iso(12), recurrence: "monthly", recurrence_end: null, status: "planned", category: "Инфраструктура", note: null },
-    { id: 3, name: "Конференция", amount: 1500, currency: "USD", due_date: iso(45), recurrence: "once", recurrence_end: null, status: "planned", category: "Поездки", note: null },
-    { id: 4, name: "Аренда Москва", amount: 90000, currency: "RUB", due_date: iso(5), recurrence: "monthly", recurrence_end: null, status: "planned", category: "Жильё", note: null },
+    { id: 1, name: "Аренда", amount: 1800, paid_amount: 0, remaining_amount: 1800, currency: "USD", due_date: iso(5), recurrence: "monthly", recurrence_end: null, status: "planned", category: "Жильё", note: null },
+    { id: 2, name: "API", amount: 900, paid_amount: 0, remaining_amount: 900, currency: "USD", due_date: iso(12), recurrence: "monthly", recurrence_end: null, status: "planned", category: "Инфраструктура", note: null },
+    { id: 3, name: "Конференция", amount: 1500, paid_amount: 0, remaining_amount: 1500, currency: "USD", due_date: iso(45), recurrence: "once", recurrence_end: null, status: "planned", category: "Поездки", note: null },
+    { id: 4, name: "Аренда Москва", amount: 90000, paid_amount: 0, remaining_amount: 90000, currency: "RUB", due_date: iso(5), recurrence: "monthly", recurrence_end: null, status: "planned", category: "Жильё", note: null },
   ],
   "/wishes": {
     base_currency: "USD",

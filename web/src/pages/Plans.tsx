@@ -74,38 +74,6 @@ const ACTION_RAIL =
   "lg:border-t-0 lg:bg-gradient-to-l lg:from-card-2 lg:from-[28%] lg:to-transparent lg:pl-9 lg:pt-0 " +
   "lg:opacity-0 lg:transition-opacity lg:group-hover:pointer-events-auto lg:group-hover:opacity-100"
 
-function pluralRu(n: number, one: string, few: string, many: string) {
-  const mod10 = Math.abs(n) % 10
-  const mod100 = Math.abs(n) % 100
-  if (mod10 === 1 && mod100 !== 11) return one
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
-  return many
-}
-
-function ExpenseKpis({ data }: { data: Expenses }) {
-  const cur = data.base_currency
-  const oneOffLabel = `${data.one_off_count} ${pluralRu(data.one_off_count, "платёж", "платежа", "платежей")} вне месяца`
-  const cards = [
-    { label: "Расходы / мес", value: data.required_monthly_income, sub: "точка нуля", tone: "text-foreground" },
-    { label: "Регулярные", value: data.monthly_obligations, sub: "платежи / мес", tone: "text-neg" },
-    { label: "Повседневные", value: data.burn_monthly, sub: "траты / мес", tone: "text-warn" },
-    { label: "Разовые впереди", value: data.one_off_total, sub: oneOffLabel, tone: "text-primary" },
-  ]
-  return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card) => (
-        <Card key={card.label} className="gap-2 px-5 py-4">
-          <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3">{card.label}</span>
-          <span className={cn("tnum text-[24px] font-semibold leading-none tracking-[-0.025em]", card.tone)}>
-            {money(card.value)} {cur}
-          </span>
-          <span className="text-[12.5px] text-ink-3">{card.sub}</span>
-        </Card>
-      ))}
-    </section>
-  )
-}
-
 // ── модуль «Ежемесячные расходы» + точка безубыточности ──────────────────────
 function Breakeven({ data }: { data: Expenses }) {
   const cur = data.base_currency
@@ -117,40 +85,8 @@ function Breakeven({ data }: { data: Expenses }) {
   const mx = Math.max(1, ...rows.map((r) => r.v))
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
-      {/* breakdown */}
-      <Card className="gap-0 px-6 py-[22px]">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <span className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
-            Ежемесячные расходы
-            <InfoHint>Сколько нужно зарабатывать в месяц, чтобы деньги не таяли: регулярные платежи + повседневные траты.</InfoHint>
-          </span>
-          <span className="tnum text-sm font-semibold text-ink-2">
-            всего <b className="text-[15px] font-semibold text-foreground">{money(total)} {cur}</b> / мес
-          </span>
-        </div>
-        {rows.length ? (
-          <div className="flex flex-col gap-[13px]">
-            {rows.map((r) => {
-              const lead = total > 0 && r.v / total > 0.25
-              return (
-                <div key={r.label} className="grid grid-cols-[128px_minmax(0,1fr)_auto] items-center gap-3">
-                  <span className="truncate text-[13.5px] text-ink-2">{r.label}</span>
-                  <span className="h-2 overflow-hidden rounded-[5px] bg-card-2">
-                    <i className={cn("block h-full rounded-[5px]", lead ? "bg-primary/55" : "bg-ink-3/40")}
-                      style={{ width: `${(r.v / mx * 100).toFixed(0)}%` }} />
-                  </span>
-                  <span className="tnum min-w-[54px] text-right text-[13.5px] font-semibold">{money(r.v)} {cur}</span>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Добавь повторяющиеся расходы, чтобы увидеть месячную картину.</p>
-        )}
-      </Card>
-
-      {/* breakeven side */}
+    <section className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
+      {/* breakeven — главный ответ, поэтому слева */}
       <Card className="relative flex flex-col gap-0 overflow-hidden px-6 py-[22px]">
         <span aria-hidden className="absolute inset-y-[18px] left-0 w-[3px] rounded-[3px] bg-pos" />
         <span className="flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-pos-soft py-1 pl-2 pr-[11px]">
@@ -184,22 +120,117 @@ function Breakeven({ data }: { data: Expenses }) {
           </p>
         )}
       </Card>
+
+      {/* breakdown */}
+      <Card className="gap-0 px-6 py-[22px]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+            Ежемесячные расходы
+            <InfoHint>Сколько нужно зарабатывать в месяц, чтобы деньги не таяли: регулярные платежи + повседневные траты.</InfoHint>
+          </span>
+          <span className="tnum text-sm font-semibold text-ink-2">
+            всего <b className="text-[15px] font-semibold text-foreground">{money(total)} {cur}</b> / мес
+          </span>
+        </div>
+        {rows.length ? (
+          <div className="flex flex-col gap-[13px]">
+            {rows.map((r) => {
+              const lead = total > 0 && r.v / total > 0.25
+              return (
+                <div key={r.label} className="grid grid-cols-[128px_minmax(0,1fr)_auto] items-center gap-3">
+                  <span className="truncate text-[13.5px] text-ink-2">{r.label}</span>
+                  <span className="h-2 overflow-hidden rounded-[5px] bg-card-2">
+                    <i className={cn("block h-full rounded-[5px]", lead ? "bg-primary/55" : "bg-ink-3/40")}
+                      style={{ width: `${(r.v / mx * 100).toFixed(0)}%` }} />
+                  </span>
+                  <span className="tnum min-w-[54px] text-right text-[13.5px] font-semibold">{money(r.v)} {cur}</span>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Добавь повторяющиеся расходы, чтобы увидеть месячную картину.</p>
+        )}
+      </Card>
     </section>
   )
 }
 
 // ── чип статуса ──────────────────────────────────────────────────────────────
-function StatusChip({ status }: { status: Obligation["status"] }) {
+function StatusChip({ obligation }: { obligation: Obligation }) {
+  if (obligation.status === "planned" && obligation.paid_amount > 0) {
+    return (
+      <span className="inline-flex min-w-[118px] items-center justify-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-[3px] text-[11.5px] font-semibold text-primary">
+        <i className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Частично
+      </span>
+    )
+  }
   const map = {
     planned: { cls: "bg-warn-soft text-warn", dot: "bg-warn", label: "Запланировано" },
     paid: { cls: "bg-pos-soft text-pos", dot: "bg-pos", label: "Оплачено" },
     cancelled: { cls: "bg-card-2 text-ink-3", dot: "bg-ink-3", label: "Отменено" },
   } as const
-  const s = map[status]
+  const s = map[obligation.status]
   return (
     <span className={cn("inline-flex min-w-[118px] items-center justify-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11.5px] font-semibold", s.cls)}>
       <i className={cn("h-1.5 w-1.5 shrink-0 rounded-full", s.dot)} />{s.label}
     </span>
+  )
+}
+
+function PaymentDialog({ obligation, onClose, onPaid }: {
+  obligation: Obligation
+  onClose: () => void
+  onPaid: (amount: number) => Promise<void>
+}) {
+  const remaining = obligation.remaining_amount
+  const [partial, setPartial] = useState("")
+  const partialAmount = Number(partial)
+  const partialValid = partial !== "" && partialAmount > 0 && partialAmount <= remaining
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/35 p-4" onMouseDown={(e) => {
+      if (e.target === e.currentTarget) onClose()
+    }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="payment-title"
+        className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="payment-title" className="text-lg font-semibold tracking-tight">Оплата расхода</h2>
+            <p className="mt-1 text-sm text-ink-2">{obligation.name}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Закрыть диалог"
+            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-card-2 hover:text-foreground">×</button>
+        </div>
+
+        <div className="mt-5 rounded-lg bg-card-2 px-4 py-3">
+          <span className="text-xs text-ink-3">Осталось оплатить</span>
+          <div className="tnum mt-1 text-2xl font-semibold">{money(remaining)} {obligation.currency}</div>
+          {obligation.paid_amount > 0 && (
+            <p className="mt-1 text-xs text-ink-3">
+              Уже оплачено {money(obligation.paid_amount)} из {money(obligation.amount)} {obligation.currency}
+            </p>
+          )}
+        </div>
+
+        <Button type="button" className="mt-4 w-full" onClick={() => void onPaid(remaining)}>
+          <CheckIcon />Оплатить полностью
+        </Button>
+
+        <div className="my-4 flex items-center gap-3 text-xs text-ink-3">
+          <span className="h-px flex-1 bg-line-2" />или частично<span className="h-px flex-1 bg-line-2" />
+        </div>
+        <div className="flex gap-2">
+          <Input type="number" min="0.01" max={remaining} step="any" value={partial}
+            onChange={(e) => setPartial(e.target.value)} aria-label="Сумма частичной оплаты"
+            placeholder="Сумма" className="tnum" autoFocus />
+          <Button type="button" variant="outline" disabled={!partialValid}
+            onClick={() => void onPaid(partialAmount)} className="shrink-0">
+            Оплатить частично
+          </Button>
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -219,6 +250,7 @@ export default function Plans() {
   const [category, setCategory] = useState("")
   const [status, setStatus] = useState("planned")
   const [recurrenceEnd, setRecurrenceEnd] = useState<string | null>(null)
+  const [paymentTarget, setPaymentTarget] = useState<Obligation | null>(null)
   const { base, conv } = useConverter()
 
   const load = useCallback(async () => {
@@ -241,7 +273,6 @@ export default function Plans() {
   const coachIdx = useCoach()
   useEffect(() => {
     if (coachIdx !== null && COACH_STEPS[coachIdx]?.target === "expense-form") startAdd()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coachIdx])
 
   function resetForm() {
@@ -291,6 +322,13 @@ export default function Plans() {
   const setObStatus = (id: number, s: string) =>
     api.patch(`/obligations/${id}`, { status: s }).then(load)
 
+  const payOneOff = async (amount: number) => {
+    if (!paymentTarget) return
+    await api.post(`/obligations/${paymentTarget.id}/payments`, { amount })
+    setPaymentTarget(null)
+    await load()
+  }
+
   const today = todayIso()
 
   const { recurRows, onceRows } = useMemo(() => {
@@ -305,6 +343,8 @@ export default function Plans() {
   // ── строка чтения ──────────────────────────────────────────────────────────
   const ReadRow = (o: Obligation) => {
     const recur = o.recurrence !== "once"
+    const paidAmount = o.paid_amount
+    const remainingAmount = o.remaining_amount
     const occ = o.status === "planned" ? nextOccurrence(o.due_date, o.recurrence, today) : o.due_date
     return (
       <div key={o.id}
@@ -331,10 +371,11 @@ export default function Plans() {
           <span className="whitespace-nowrap text-[13px] text-ink-2">{REC_LABEL[o.recurrence]}</span>
           <span className="tnum whitespace-nowrap text-[13px] text-ink-2">{ddmm(occ)}</span>
           <span className="block text-left">
-            <span className="tnum block whitespace-nowrap text-[15.5px] font-semibold text-neg">−{money(o.amount)} {o.currency}</span>
-            {o.currency !== base && <BaseAside cur={base} value={conv(o.amount, o.currency)} sign="−" />}
+            <span className="tnum block whitespace-nowrap text-[15.5px] font-semibold text-neg">−{money(remainingAmount)} {o.currency}</span>
+            {paidAmount > 0 && <span className="block whitespace-nowrap text-[11px] text-ink-3">из {money(o.amount)} · оплачено {money(paidAmount)}</span>}
+            {o.currency !== base && <BaseAside cur={base} value={conv(remainingAmount, o.currency)} sign="−" />}
           </span>
-          <span className="flex min-w-0 justify-start"><StatusChip status={o.status} /></span>
+          <span className="flex min-w-0 justify-start"><StatusChip obligation={o} /></span>
         </div>
         <div className={ACTION_RAIL} aria-label="Действия с расходом">
           <button type="button" aria-label="Редактировать расход" title="Редактировать" onClick={() => startEdit(o)}
@@ -346,7 +387,7 @@ export default function Plans() {
               <button type="button"
                 aria-label={recur ? "Отметить расход оплаченным за период" : "Отметить расход оплаченным"}
                 title={recur ? "оплатить за этот период → перейти к следующему" : undefined}
-                onClick={() => setObStatus(o.id, "paid")}
+                onClick={() => recur ? setObStatus(o.id, "paid") : setPaymentTarget(o)}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-[11px] text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos">
                 <CheckIcon />Оплачено
               </button>
@@ -441,7 +482,6 @@ export default function Plans() {
         )}
       </div>
 
-      {expenses && <ExpenseKpis data={expenses} />}
       {expenses && <Breakeven data={expenses} />}
 
       <Card className="gap-0 px-2 pb-3 pt-2">
@@ -479,6 +519,9 @@ export default function Plans() {
           </>
         )}
       </Card>
+      {paymentTarget && (
+        <PaymentDialog obligation={paymentTarget} onClose={() => setPaymentTarget(null)} onPaid={payOneOff} />
+      )}
     </div>
   )
 }

@@ -245,7 +245,7 @@ def expenses_summary(db: Session, precomputed=None):
     for o in rows:
         if o.status != "planned":
             continue
-        base = Decimal(o.amount) * rates.get(o.currency, Decimal("0"))
+        base = o.outstanding_amount * rates.get(o.currency, Decimal("0"))
         if o.recurrence == "once":
             one_off_total += base
             one_off_count += 1
@@ -298,7 +298,9 @@ def _burn_from_db(
             for d in snap_dates
         }
         obligations = [
-            Obligation(name=o.name, amount=Decimal(o.amount), currency=o.currency,
+            Obligation(name=o.name,
+                       amount=o.outstanding_amount,
+                       currency=o.currency,
                        due_date=o.due_date, recurrence=o.recurrence,
                        recurrence_end=o.recurrence_end, status=o.status)
             for o in obligation_rows
@@ -477,7 +479,9 @@ def forecast_from_db(db: Session, today: date | None = None, horizon_days: int |
         if s.account_id in accounts
     ]
     obligations = [
-        Obligation(name=o.name, amount=Decimal(o.amount), currency=o.currency,
+        Obligation(name=o.name,
+                   amount=o.outstanding_amount,
+                   currency=o.currency,
                    due_date=o.due_date, recurrence=o.recurrence,
                    recurrence_end=o.recurrence_end, status=o.status)
         for o in db.scalars(select(ObligationRow)).all()

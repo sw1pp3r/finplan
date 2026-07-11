@@ -635,6 +635,48 @@ def test_paying_oneoff_obligation_marks_paid(client):
     client.patch(f"/api/obligations/{ob_id}", json={"status": "paid"})
     o = client.get("/api/obligations").json()[0]
     assert o["status"] == "paid"  # разовое — как раньше
+    assert o["paid_amount"] == pytest.approx(500)
+    assert o["remaining_amount"] == pytest.approx(0)
+
+
+def test_partial_payment_keeps_oneoff_planned_and_forecasts_only_remainder(client):
+    acc = make_account(client, "Bank", "USD")
+    post_snapshot(client, [{"account_id": acc, "amount": 5000}])
+    due = TODAY + timedelta(days=12)
+    ob_id = client.post("/api/obligations", json={
+        "name": "Ремонт", "amount": 1200, "currency": "USD",
+        "due_date": due.isoformat(), "recurrence": "once",
+    }).json()["id"]
+
+    r = client.post(f"/api/obligations/{ob_id}/payments", json={"amount": 450})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "paid_amount": 450.0, "remaining_amount": 750.0, "status": "planned"}
+
+    obligation = client.get("/api/obligations").json()[0]
+    assert obligation["amount"] == pytest.approx(1200)
+    assert obligation["paid_amount"] == pytest.approx(450)
+    assert obligation["remaining_amount"] == pytest.approx(750)
+    assert obligation["status"] == "planned"
+
+    forecast_end = client.get("/api/forecast").json()["scenarios"]["base"][-1][1]
+    assert forecast_end == pytest.approx(4250)
+    expenses = client.get("/api/expenses").json()
+    assert expenses["one_off_total"] == pytest.approx(750)
+    assert expenses["one_off_count"] == 1
+
+
+def test_partially_paid_oneoff_rejects_an_invalid_new_total_or_recurrence(client):
+    ob_id = client.post("/api/obligations", json={
+        "name": "Ремонт", "amount": 1200, "currency": "USD",
+        "due_date": TODAY.isoformat(), "recurrence": "once",
+    }).json()["id"]
+    assert client.post(f"/api/obligations/{ob_id}/payments", json={"amount": 450}).status_code == 200
+
+    assert client.patch(f"/api/obligations/{ob_id}", json={"amount": 400}).status_code == 422
+    assert client.patch(f"/api/obligations/{ob_id}", json={"recurrence": "monthly"}).status_code == 422
+    obligation = client.get("/api/obligations").json()[0]
+    assert obligation["amount"] == pytest.approx(1200)
+    assert obligation["recurrence"] == "once"
 
 
 # ---------- fx / rates ----------

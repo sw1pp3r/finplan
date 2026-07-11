@@ -34,9 +34,6 @@ const PROB_STYLE = {
 const PROB_LABEL = {
   confirmed: PROB_STYLE.confirmed.label, likely: PROB_STYLE.likely.label, possible: PROB_STYLE.possible.label,
 }
-const PROB_KEYS = ["confirmed", "likely", "possible"] as const
-type ProbKey = typeof PROB_KEYS[number]
-
 const isRegular = (rec: string) => rec !== "once"
 const initials = (s: string) => (s.trim()[0] || "•").toUpperCase()
 
@@ -133,18 +130,14 @@ function GroupLabel({ text, n }: { text: string; n: number }) {
 function IncomeTotalDashboard({
   data,
   cur,
-  selected,
-  onToggle,
 }: {
   data: IncomeData
   cur: string
-  selected: Record<ProbKey, boolean>
-  onToggle: (p: ProbKey) => void
 }) {
-  const future = PROB_KEYS.reduce((sum, p) => sum + (selected[p] ? data.expected.by_probability[p] : 0), 0)
+  const future = data.expected.total
   const total = data.total + future
   return (
-    <section className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+    <section>
       <div className="relative overflow-hidden rounded-lg border border-border bg-card px-6 py-5 shadow-sm">
         <span aria-hidden className="absolute inset-y-[18px] left-0 w-[3px] rounded bg-pos" />
         <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
@@ -162,42 +155,6 @@ function IncomeTotalDashboard({
             <span className="text-[12px] font-medium text-ink-3">Будущие</span>
             <span className="tnum mt-1 block text-[20px] font-semibold text-warn">{money(future)} {cur}</span>
           </div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-border bg-card px-5 py-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-            Вероятность будущих
-          </span>
-          <span className="tnum text-[13px] font-semibold text-ink-2">{money(future)} {cur}</span>
-        </div>
-        <div className="flex flex-col gap-2">
-          {PROB_KEYS.map((p) => {
-            const st = PROB_STYLE[p]
-            return (
-              <label key={p}
-                className={cn(
-                  "flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-                  selected[p] ? "border-primary/35 bg-accent-soft" : "border-border bg-card-2",
-                )}>
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    aria-label={st.label}
-                    checked={selected[p]}
-                    onChange={() => onToggle(p)}
-                    className="h-4 w-4 rounded border-border accent-[var(--primary)]"
-                  />
-                  <span className="truncate text-[13px] font-medium text-foreground">{st.label}</span>
-                  <span className="text-[12px] text-ink-3">{st.pct}</span>
-                </span>
-                <span className={cn("tnum whitespace-nowrap text-[13.5px] font-semibold", st.text)}>
-                  +{money(data.expected.by_probability[p])} {cur}
-                </span>
-              </label>
-            )
-          })}
         </div>
       </div>
     </section>
@@ -341,10 +298,10 @@ function ReadRow({ i, base, conv, onEdit, onMark, onLost, onReturn, onDelete }: 
         {i.status === "expected" ? REC_LABEL[i.recurrence] : "—"}
       </span>
       <span className="hidden whitespace-nowrap text-[13px] text-ink-2 tnum lg:block">{ddmm(i.expected_date)}</span>
-      <span className="hidden min-w-0 lg:flex lg:items-center lg:gap-1.5">
+      <span className="hidden min-w-0 lg:flex lg:flex-col lg:items-start lg:gap-1">
         <StatusChip status={i.status} />
         {i.status === "expected" && (
-          <span className="text-[11px] text-ink-3">{PROB_LABEL[i.probability]}</span>
+          <span className="whitespace-nowrap pl-2.5 text-[11px] text-ink-3">{PROB_LABEL[i.probability]}</span>
         )}
       </span>
 
@@ -504,11 +461,6 @@ export default function Income() {
   const [inflows, setInflows] = useState<Inflow[]>([])
   const [directions, setDirections] = useState<Ref[]>([])
   const [filter, setFilter] = useState<"all" | "expected" | "received">("all")
-  const [probFilter, setProbFilter] = useState<Record<ProbKey, boolean>>({
-    confirmed: true,
-    likely: true,
-    possible: true,
-  })
   const [adding, setAdding] = useState(false)
   const [addForm, setAddForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -556,7 +508,6 @@ export default function Income() {
   const coachIdx = useCoach()
   useEffect(() => {
     if (coachIdx !== null && COACH_STEPS[coachIdx]?.target === "income-form") openAdd()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coachIdx])
 
   if (!data) return <div className="py-20 text-center text-sm text-muted-foreground">Загрузка…</div>
@@ -596,10 +547,6 @@ export default function Income() {
     if (!s) return { counterparty: null, direction: null }
     const isDir = directions.some((d) => d.name === s)
     return isDir ? { counterparty: null, direction: s } : { counterparty: s, direction: null }
-  }
-
-  function toggleProb(p: ProbKey) {
-    setProbFilter((prev) => ({ ...prev, [p]: !prev[p] }))
   }
 
   async function submitAdd(e: React.FormEvent<HTMLFormElement>) {
@@ -705,7 +652,7 @@ export default function Income() {
         </button>
       </div>
 
-      <IncomeTotalDashboard data={data} cur={cur} selected={probFilter} onToggle={toggleProb} />
+      <IncomeTotalDashboard data={data} cur={cur} />
 
       {data.expected.total > 0 && (
         <PipelineTop data={data} expectedRows={expectedRows} cur={cur} regularMonthly={regularMonthly} />

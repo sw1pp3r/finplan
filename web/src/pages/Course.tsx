@@ -271,7 +271,7 @@ export default function CoursePage() {
     <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-4">
       {/* heading */}
       <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-        Ещё <span className="font-normal text-ink-3">/</span> Курс
+        Курс
       </h1>
 
       {/* sandbox header */}

@@ -6,7 +6,8 @@ import {
   TrendingUp,
   TrendingDown,
   Flag,
-  MoreHorizontal,
+  GraduationCap,
+  Boxes,
   SlidersHorizontal,
   LineChart,
   Moon,
@@ -16,7 +17,8 @@ import Dashboard from "@/pages/Dashboard"
 import Snapshot from "@/pages/Snapshot"
 import Plans from "@/pages/Plans"
 import Income from "@/pages/Income"
-import More from "@/pages/More"
+import Course from "@/pages/Course"
+import Services from "@/pages/Services"
 import Wishes from "@/pages/Wishes"
 import Settings from "@/pages/Settings"
 import { cn } from "@/lib/utils"
@@ -33,14 +35,13 @@ function toggleDemo() {
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard }
 
-// Порядок и имена — финал по мастер-ТЗ: Дашборд · Баланс · Доходы · Расходы · Мечты · Ещё · Настройки.
+// Основные рабочие разделы; Курс добавляется отдельно, потому что его можно скрыть в Настройках.
 const navMain: NavItem[] = [
   { to: "/", label: "Дашборд", icon: LayoutDashboard },
   { to: "/balance", label: "Баланс", icon: Wallet },
   { to: "/income", label: "Доходы", icon: TrendingUp },
   { to: "/expenses", label: "Расходы", icon: TrendingDown },
   { to: "/wishes", label: "Мечты", icon: Flag },
-  { to: "/more", label: "Ещё", icon: MoreHorizontal },
 ]
 
 function NavRow({ item }: { item: NavItem }) {
@@ -84,7 +85,11 @@ function profileInitials(name: string): string {
 export default function App() {
   const showCourse = useShowCourse()
   const theme = useTheme()
-  const visibleNav = navMain
+  const visibleNav = [
+    ...navMain,
+    ...(showCourse ? [{ to: "/course", label: "Курс", icon: GraduationCap }] : []),
+    { to: "/services", label: "Сервисы", icon: Boxes },
+  ]
 
   // Имя пользователя из настроек (демо → «Артём», реальная БД → заданное в Настройках).
   const [profileName, setProfileName] = useState("")
@@ -172,14 +177,15 @@ export default function App() {
 
         <NavRow item={{ to: "/settings", label: "Настройки", icon: SlidersHorizontal }} />
 
-        <div className="mt-1.5 flex items-center gap-3 rounded-[10px] border border-border bg-card px-2.5 py-2.5">
+        <NavLink to="/settings" aria-label={profileName.trim() || "Профиль"}
+          className="mt-1.5 flex items-center gap-3 rounded-[10px] border border-border bg-card px-2.5 py-2.5 transition-colors hover:border-ink-3 hover:bg-card-2">
           <span className="grid size-[33px] shrink-0 place-items-center rounded-[9px] bg-primary text-[13px] font-semibold text-primary-foreground">
             {profileInitials(profileName)}
           </span>
           <div className="min-w-0">
             <div className="truncate text-[13.5px] font-medium leading-tight">{profileName.trim() || "Профиль"}</div>
           </div>
-        </div>
+        </NavLink>
       </aside>
 
       {/* ===== main ===== */}
@@ -229,8 +235,11 @@ export default function App() {
             <Route path="/plans" element={<Navigate to="/expenses" replace />} />
             <Route path="/wishes" element={<Wishes />} />
             <Route path="/board" element={<Navigate to="/wishes?view=board" replace />} />
-            <Route path="/more/*" element={<More />} />
-            <Route path="/course" element={<Navigate to={showCourse ? "/more/course" : "/more/services"} replace />} />
+            <Route path="/course" element={showCourse ? <Course /> : <Navigate to="/services" replace />} />
+            <Route path="/services" element={<Services />} />
+            <Route path="/more/course" element={<Navigate to={showCourse ? "/course" : "/services"} replace />} />
+            <Route path="/more/services" element={<Navigate to="/services" replace />} />
+            <Route path="/more/*" element={<Navigate to={showCourse ? "/course" : "/services"} replace />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

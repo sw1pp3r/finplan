@@ -329,7 +329,7 @@ export default function Services() {
   return (
     <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-4">
       <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-        Ещё <span className="font-normal text-ink-3">/</span> Сервисы
+        Сервисы
       </h1>
 
       {/* selector row */}

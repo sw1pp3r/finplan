@@ -149,6 +149,10 @@ class ObligationPatch(BaseModel):
     note: Note | None = None
 
 
+class ObligationPaymentIn(BaseModel):
+    amount: Amount
+
+
 class RefIn(BaseModel):
     name: Ref80
 
@@ -460,7 +464,10 @@ def snapshot_by_date(taken_at: date, db: Session = Depends(get_db)):
 def list_obligations(db: Session = Depends(get_db)):
     rows = db.scalars(select(ObligationRow).order_by(ObligationRow.due_date)).all()
     return [
-        {"id": o.id, "name": o.name, "amount": float(o.amount), "currency": o.currency,
+        {"id": o.id, "name": o.name, "amount": float(o.amount),
+         "paid_amount": float(o.paid_amount or 0),
+         "remaining_amount": float(o.outstanding_amount),
+         "currency": o.currency,
          "due_date": o.due_date.isoformat(), "recurrence": o.recurrence,
          "recurrence_end": o.recurrence_end.isoformat() if o.recurrence_end else None,
          "status": o.status, "category": o.category, "note": o.note}
@@ -488,6 +495,14 @@ def patch_obligation(ob_id: int, body: ObligationPatch, db: Session = Depends(ge
         raise HTTPException(404, f"unknown obligation {ob_id}")
     data = body.model_dump(exclude_unset=True)  # явный null очищает nullable-поле (#14)
     _reject_nulls(data, {"name", "amount", "currency", "due_date", "recurrence", "status"})
+    paid_amount = Decimal(o.paid_amount or 0)
+    if paid_amount > 0:
+        if "amount" in data and dec(data["amount"]) < paid_amount:
+            raise HTTPException(422, "amount must not be lower than paid_amount")
+        if "currency" in data and data["currency"].upper() != o.currency:
+            raise HTTPException(422, "currency cannot change after a partial payment")
+        if "recurrence" in data and data["recurrence"] != "once":
+            raise HTTPException(422, "partially paid obligation must remain one-off")
     # повторяющееся + «оплачено» → не закрываем серию, а двигаем на следующий платёж
     if data.get("status") == "paid" and o.recurrence != "once":
         # Следующее наступление on-or-after сегодня — это и есть следующий платёж.
@@ -503,15 +518,52 @@ def patch_obligation(ob_id: int, body: ObligationPatch, db: Session = Depends(ge
         else:
             o.due_date = nxt
             o.status = "planned"
+        o.paid_amount = Decimal("0")
         data.pop("status", None)
+    elif data.get("status") == "paid":
+        o.paid_amount = dec(data.get("amount", o.amount))
+    elif data.get("status") == "planned" and o.status == "paid":
+        o.paid_amount = Decimal("0")
     for field, value in data.items():
         if field == "amount" and value is not None:
             value = dec(value)
         if field == "currency" and value is not None:
             value = value.upper()
         setattr(o, field, value)
+    if o.status == "planned" and Decimal(o.paid_amount or 0) == Decimal(o.amount):
+        o.status = "paid"
     db.commit()
     return {"ok": True}
+
+
+@router.post("/obligations/{ob_id}/payments", dependencies=[Depends(require_token)])
+def pay_obligation(ob_id: int, body: ObligationPaymentIn, db: Session = Depends(get_db)):
+    o = db.get(ObligationRow, ob_id)
+    if o is None:
+        raise HTTPException(404, f"unknown obligation {ob_id}")
+    if o.recurrence != "once":
+        raise HTTPException(422, "partial payments are supported only for one-off obligations")
+    if o.status != "planned":
+        raise HTTPException(422, "only planned obligations can be paid")
+
+    paid = Decimal(o.paid_amount or 0)
+    amount = dec(body.amount)
+    remaining = o.outstanding_amount
+    if amount > remaining:
+        raise HTTPException(422, "payment exceeds remaining amount")
+
+    paid += amount
+    o.paid_amount = paid
+    remaining = o.outstanding_amount
+    if remaining == 0:
+        o.status = "paid"
+    db.commit()
+    return {
+        "ok": True,
+        "paid_amount": float(paid),
+        "remaining_amount": float(remaining),
+        "status": o.status,
+    }
 
 
 @router.delete("/obligations/{ob_id}", dependencies=[Depends(require_token)])

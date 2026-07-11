@@ -39,6 +39,8 @@ export type Obligation = {
   id: number
   name: string
   amount: number
+  paid_amount: number
+  remaining_amount: number
   currency: string
   due_date: string
   recurrence: "once" | "weekly" | "monthly" | "yearly"

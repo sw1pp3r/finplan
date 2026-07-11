@@ -248,6 +248,25 @@ def test_21_migration_recurrence_not_null():
     assert cols["recurrence"] is False  # мигрированная схема NOT NULL, как в модели
 
 
+def test_partial_payment_migration_adds_non_null_zero_paid_amount():
+    e = create_engine("sqlite://")
+    Base.metadata.create_all(e)
+    with e.begin() as conn:
+        conn.execute(text("DROP TABLE obligations"))
+        conn.execute(text("CREATE TABLE obligations (id INTEGER PRIMARY KEY, name VARCHAR(120), "
+                          "amount NUMERIC(18,2), currency VARCHAR(12), due_date DATE, "
+                          "recurrence VARCHAR(10), recurrence_end DATE, status VARCHAR(10), "
+                          "category VARCHAR(80), note VARCHAR(300))"))
+        conn.execute(text("INSERT INTO obligations(name,amount,currency,due_date,recurrence,status) "
+                          "VALUES('old',100,'USD','2026-07-11','once','planned')"))
+
+    _ensure_columns(e)
+    cols = {c["name"]: c["nullable"] for c in inspect(e).get_columns("obligations")}
+    assert cols["paid_amount"] is False
+    with e.connect() as conn:
+        assert conn.execute(text("SELECT paid_amount FROM obligations")).scalar_one() == 0
+
+
 # ---------- #26/#27: SSRF-гард резолвит и блокирует числовые/internal-хосты ----------
 def test_26_numeric_ip_encodings_blocked():
     fake = lambda host, port: [(2, 1, 6, "", ("127.0.0.1", 0))]
