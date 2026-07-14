@@ -122,6 +122,15 @@ describe("интерфейсные регрессии аудита", () => {
     expect((await screen.findAllByRole("button", { name: "Удалить расход" })).length).toBeGreaterThan(0)
   })
 
+  it("детали частичной оплаты переносятся и не залезают под статус на узкой ширине", async () => {
+    const { default: Plans } = await import("@/pages/Plans")
+    renderAt(<Plans />, "/expenses")
+
+    const paymentDetails = await screen.findByText("из 1 500 · оплачено 600")
+    expect(paymentDetails).toHaveClass("whitespace-normal")
+    expect(paymentDetails).not.toHaveClass("whitespace-nowrap")
+  })
+
   it("разовый расход можно закрыть частично из диалога оплаты", async () => {
     const { api } = await import("@/lib/api")
     const { default: Plans } = await import("@/pages/Plans")

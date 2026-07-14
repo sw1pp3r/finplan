@@ -370,9 +370,9 @@ export default function Plans() {
           </div>
           <span className="whitespace-nowrap text-[13px] text-ink-2">{REC_LABEL[o.recurrence]}</span>
           <span className="tnum whitespace-nowrap text-[13px] text-ink-2">{ddmm(occ)}</span>
-          <span className="block text-left">
+          <span className="block min-w-0 text-left">
             <span className="tnum block whitespace-nowrap text-[15.5px] font-semibold text-neg">−{money(remainingAmount)} {o.currency}</span>
-            {paidAmount > 0 && <span className="block whitespace-nowrap text-[11px] text-ink-3">из {money(o.amount)} · оплачено {money(paidAmount)}</span>}
+            {paidAmount > 0 && <span className="block whitespace-normal break-words text-[11px] leading-4 text-ink-3">из {money(o.amount)} · оплачено {money(paidAmount)}</span>}
             {o.currency !== base && <BaseAside cur={base} value={conv(remainingAmount, o.currency)} sign="−" />}
           </span>
           <span className="flex min-w-0 justify-start"><StatusChip obligation={o} /></span>
