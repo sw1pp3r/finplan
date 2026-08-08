@@ -65,7 +65,7 @@ describe("(B) дашборд: расходы/мес = required_monthly_income, �
     await screen.findByRole("heading", { name: "Финансовый простор" })
     // свободно/мес отрицательно: −690 (доказывает, что вычли required, а не burn)
     await waitFor(() =>
-      expect(screen.getByText("Свободно / мес").parentElement).toHaveTextContent(/690.*USD/),
+      expect(screen.getByText(/Регулярно · в месяц/).parentElement).toHaveTextContent(/690.*USD/),
     )
   })
 })

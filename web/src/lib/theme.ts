@@ -9,10 +9,16 @@ const listeners = new Set<() => void>()
 
 function read(): Theme {
   try {
-    return localStorage.getItem(KEY) === "dark" ? "dark" : "light"
+    const stored = localStorage.getItem(KEY)
+    if (stored === "dark" || stored === "light") return stored
   } catch {
-    return "light"
+    /* ignore */
   }
+  // Выбора ещё не было — идём за системой, а не навязываем светлую.
+  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+    return "dark"
+  }
+  return "light"
 }
 
 function apply(t: Theme) {

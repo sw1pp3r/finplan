@@ -119,9 +119,9 @@ describe("интерфейсные регрессии аудита", () => {
     expect(screen.queryByRole("link", { name: "Операция" })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Что это за раздел?" })).toHaveAttribute("aria-expanded", "false")
     expect(screen.queryByText(/Главная картина денег/)).not.toBeInTheDocument()
-    expect(screen.getByText("Свободный ресурс")).toBeInTheDocument()
-    expect(screen.getByText("Свободно / мес")).toBeInTheDocument()
-    expect(screen.getByText("Ожидается / 30 дней")).toBeInTheDocument()
+    expect(screen.getByText(/Свободно над подушкой/)).toBeInTheDocument()
+    expect(screen.getByText(/Регулярно · в месяц/)).toBeInTheDocument()
+    expect(screen.getByText(/Запланировано · 30 дней/)).toBeInTheDocument()
     expect(screen.getByText("Уже по карману")).toBeInTheDocument()
   })
 
@@ -138,7 +138,7 @@ describe("интерфейсные регрессии аудита", () => {
     expect(screen.getByRole("button", { name: "Оптимистичный" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Осторожный" })).toBeInTheDocument()
 
-    expect(screen.getByRole("heading", { name: "Движение ближайших 30 дней" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Ближайшие 30 дней" })).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Все поступления" })).toHaveAttribute("href", "/income")
     expect(screen.getByRole("link", { name: "Все обязательства" })).toHaveAttribute("href", "/expenses")
     expect(screen.queryByRole("heading", { name: "Счета" })).not.toBeInTheDocument()
@@ -160,9 +160,10 @@ describe("интерфейсные регрессии аудита", () => {
     const { default: Dashboard } = await import("@/pages/Dashboard")
     renderAt(<Dashboard />)
 
-    expect(await screen.findByRole("link", { name: "Укрепить план" })).toHaveAttribute("href", "/income")
-    expect(screen.getByText("План можно усилить")).toBeInTheDocument()
-    expect(screen.getByText(/Чтобы сохранить подушку на всём горизонте/)).toBeInTheDocument()
+    // вердикт называет ДАТУ и сумму, а не «большую часть горизонта»; тон остаётся спокойным
+    expect(await screen.findByText(/Подушка пробита 14\.09/)).toBeInTheDocument()
+    expect(screen.getByText(/не хватает 3[\s ]000 USD/)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Добавить поступление" })).toHaveAttribute("href", "/income")
     expect(screen.queryByText(/риск|опасност/i)).not.toBeInTheDocument()
 
     vi.mocked(api.get).mockImplementation((path: string) => {
@@ -171,7 +172,10 @@ describe("интерфейсные регрессии аудита", () => {
     })
   })
 
-  it("дашборд не обещает обеспеченный горизонт по устаревшему снимку", async () => {
+  // Устаревший снимок — оговорка о свежести, а не блокер: числа посчитаны верно.
+  // Раньше один булев флаг переписывал четыре блока (баннер + чип + заголовок + мечту);
+  // теперь он живёт ровно одной ссылкой, а вердикт продолжает считаться.
+  it("устаревший снимок помечается ОДНОЙ ссылкой и не отменяет вердикт", async () => {
     const { api } = await import("@/lib/api")
     vi.mocked(api.get).mockImplementation((path: string) => {
       const data = structuredClone(fixtureFor(path)) as Record<string, unknown>
@@ -182,13 +186,15 @@ describe("интерфейсные регрессии аудита", () => {
     const { default: Dashboard } = await import("@/pages/Dashboard")
     renderAt(<Dashboard />)
 
-    expect(await screen.findByText("Обновите остатки")).toBeInTheDocument()
-    expect(screen.getByText("Картина возможностей уточняется")).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Обновить баланс" })).toHaveAttribute("href", "/balance")
-    expect(screen.queryByText("Следующие 6 месяцев закрыты")).not.toBeInTheDocument()
-    expect(screen.queryByText("Уже по карману")).not.toBeInTheDocument()
+    const stale = await screen.findByRole("link", { name: /дн\. назад · обновить/ })
+    expect(stale).toHaveAttribute("href", "/balance")
+    expect(screen.getAllByText(/обновить/i)).toHaveLength(1)
+    expect(screen.getByText(/Подушка держится 6 месяцев/)).toBeInTheDocument()
+    expect(screen.getByText(/Уже по карману/)).toBeInTheDocument()
+    expect(screen.queryByText("Картина возможностей уточняется")).not.toBeInTheDocument()
   })
 
+  // Недостающий курс — другое дело: часть счетов приводится к нулю, вердикт был бы неправдой.
   it("дашборд не считает ресурс полным, пока не хватает курса", async () => {
     const { api } = await import("@/lib/api")
     vi.mocked(api.get).mockImplementation((path: string) => {
@@ -200,11 +206,51 @@ describe("интерфейсные регрессии аудита", () => {
     const { default: Dashboard } = await import("@/pages/Dashboard")
     renderAt(<Dashboard />)
 
-    expect(await screen.findByText("Нужны все курсы")).toBeInTheDocument()
-    expect(screen.getByText("Картина возможностей уточняется")).toBeInTheDocument()
+    expect(await screen.findByText(/Нужен курс для EUR/)).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Добавить курс" })).toHaveAttribute("href", "/settings")
-    expect(screen.queryByText("Следующие 6 месяцев закрыты")).not.toBeInTheDocument()
-    expect(screen.queryByText("Уже по карману")).not.toBeInTheDocument()
+    expect(screen.queryByText(/Подушка держится 6 месяцев/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Уже по карману/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Свободно над подушкой/).parentElement).toHaveTextContent("—")
+  })
+
+  // P0: срез ленты по ДАТЕ прятал самое крупное обязательство месяца, оставляя
+  // подытог, который не сходится с видимыми строками.
+  it("лента 30 дней не может спрятать самое крупное событие", async () => {
+    const { api } = await import("@/lib/api")
+    const today = new Date()
+    const inDays = (n: number) => {
+      const d = new Date(today)
+      d.setDate(d.getDate() + n)
+      return d.toISOString().slice(0, 10)
+    }
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path === "/obligations") {
+        return Promise.resolve([
+          ...Array.from({ length: 8 }, (_, i) => ({
+            id: i + 1, name: `Мелочь ${i + 1}`, amount: 50, paid_amount: 0, remaining_amount: 50,
+            currency: "USD", due_date: inDays(i + 1), recurrence: "once", recurrence_end: null,
+            status: "planned", category: "Прочее", note: null,
+          })),
+          {
+            id: 99, name: "Аренда за квартал", amount: 9000, paid_amount: 0, remaining_amount: 9000,
+            currency: "USD", due_date: inDays(28), recurrence: "once", recurrence_end: null,
+            status: "planned", category: "Жильё", note: null,
+          },
+        ]) as never
+      }
+      if (path === "/inflows") return Promise.resolve([]) as never
+      return Promise.resolve(fixtureFor(path)) as never
+    })
+
+    const { default: Dashboard } = await import("@/pages/Dashboard")
+    renderAt(<Dashboard />)
+
+    await screen.findByRole("heading", { name: "Ближайшие 30 дней" })
+    // крупнейшее событие месяца стоит последним по дате — и всё равно показано
+    expect(screen.getByText("Аренда за квартал")).toBeInTheDocument()
+    // скрытое не исчезает молча: остаток назван числом
+    expect(screen.getByText("Ещё 3")).toBeInTheDocument()
+    expect(screen.getByText(/−150 USD/)).toBeInTheDocument()
   })
 
   it("дашборд не возвращает просроченный разовый платёж в ближайшее движение", async () => {
@@ -235,7 +281,7 @@ describe("интерфейсные регрессии аудита", () => {
     const { default: Dashboard } = await import("@/pages/Dashboard")
     renderAt(<Dashboard />)
 
-    await screen.findByRole("heading", { name: "Движение ближайших 30 дней" })
+    await screen.findByRole("heading", { name: "Ближайшие 30 дней" })
     expect(screen.queryByText("Старый долг")).not.toBeInTheDocument()
     expect(screen.queryByText(/Сильнее всего влияет/)).not.toBeInTheDocument()
 
@@ -259,8 +305,8 @@ describe("интерфейсные регрессии аудита", () => {
     const { default: Dashboard } = await import("@/pages/Dashboard")
     renderAt(<Dashboard />)
 
-    expect(await screen.findByText("Нужен стартовый баланс")).toBeInTheDocument()
-    expect(screen.getByText(/Добавьте актуальный баланс/)).toBeInTheDocument()
+    expect(await screen.findByText("Здесь появится ваш финансовый простор")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Добавить стартовый баланс" })).toHaveAttribute("href", "/balance")
     expect(screen.getByRole("link", { name: "Записать баланс" })).toHaveAttribute("href", "/balance")
     expect(screen.queryByText("Большой запас")).not.toBeInTheDocument()
 

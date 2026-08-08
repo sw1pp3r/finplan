@@ -1,15 +1,14 @@
 /**
- * THESIS: Главный экран показывает финансовый простор и отказывается от danger-dashboard.
- * OWN-WORLD: Строгий Geist/zinc, одно зелёное поле обеспеченности, тонкие линии и честные числа.
- * STORY: Сначала — что уже обеспечено, затем свободный ресурс, мечта и ближайшее движение денег.
- * FIRST VIEWPORT: Вердикт и ресурс над подушкой ведут; график доказывает, CTA добавляет поступление.
- * FORM: «Финансовый простор», цельное decision-полотно внутри существующей Operate-системы.
+ * THESIS: Дашборд — приборная панель: один вердикт с датой, четыре сходящихся числа, доказательство.
+ * OWN-WORLD: Строгий zinc, одна вваренная полоса метрик, хайрлайны вместо карточек, ноль тонированных панелей.
+ * STORY: Вердикт (что и когда) → четыре числа, которые его объясняют → график-доказательство → ближайшие 30 дней.
+ * FIRST VIEWPORT: Строка вердикта и полоса метрик; период стоит рядом с вердиктом, потому что задаёт его.
+ * FORM: Один инструмент, а не набор виджетов. Мечта — строка, а не витрина: доска живёт на /wishes.
  */
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { Sparkles } from "lucide-react"
 import {
-  Area, ComposedChart, Line, ReferenceArea, ReferenceLine,
+  Area, ComposedChart, Line, ReferenceArea, ReferenceDot, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts"
 import {
@@ -28,9 +27,11 @@ import {
 } from "@/components/ui/select"
 
 type Scenario = "base" | "optimistic" | "pessimistic"
+type FlowEvent = { date: string; name: string; amount: number }
 
 const PERIOD_KEY = "finplan-period"
 const SCENARIO_KEY = "finplan-scenario"
+const COMPARE_KEY = "finplan-compare"
 // «6 месяцев» = 180, в лад с settings.horizon_days по умолчанию (#6) — иначе график
 // и карточки стартовали бы на разных окнах по умолчанию.
 const PERIODS: { value: number; label: string }[] = [
@@ -40,21 +41,28 @@ const PERIODS: { value: number; label: string }[] = [
   { value: 180, label: "6 месяцев" },
   { value: 365, label: "1 год" },
 ]
-const PERIOD_HEADLINE: Record<number, string> = {
-  14: "Следующие 2 недели закрыты",
-  31: "Ближайший месяц закрыт",
-  92: "Следующие 3 месяца закрыты",
-  180: "Следующие 6 месяцев закрыты",
-  365: "Следующий год закрыт",
-}
 const SCEN_LABEL: Record<Scenario, string> = {
   base: "базовый", optimistic: "оптимистичный", pessimistic: "осторожный",
 }
+// Сколько строк движения показываем до сворачивания в «ещё N».
+const FLOW_ROWS = 6
 
 /** Прочитать CSS-переменную темы во время рендера (следует за light/dark). */
 function cssVar(name: string): string {
   if (typeof window === "undefined") return ""
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+/** Целых дней между ISO-датой и сегодня. */
+function daysSince(iso: string): number {
+  const then = new Date(`${iso}T00:00:00`).getTime()
+  const now = new Date(`${todayIso()}T00:00:00`).getTime()
+  return Math.max(0, Math.round((now - then) / 86_400_000))
+}
+
+/** Знаковая сумма: «+1 200» / «−1 200». */
+function signed(v: number): string {
+  return `${v >= 0 ? "+" : "−"}${money(Math.abs(v))}`
 }
 
 export default function Dashboard() {
@@ -81,7 +89,11 @@ export default function Dashboard() {
     const saved = localStorage.getItem(SCENARIO_KEY)
     return saved === "optimistic" || saved === "pessimistic" ? saved : "base"
   })
-  const [showScenarios, setShowScenarios] = useState(false)
+  // Персистим вместе со сценарием: иначе после релоада рисуется осторожная линия
+  // со скрытым переключателем, и её нечем объяснить.
+  const [showScenarios, setShowScenarios] = useState(
+    () => localStorage.getItem(COMPARE_KEY) === "1",
+  )
   // Триггер пересчёта цветов графика при смене темы (light/dark).
   const [themeTick, setThemeTick] = useState(0)
 
@@ -148,6 +160,12 @@ export default function Dashboard() {
     setScenario(v)
     localStorage.setItem(SCENARIO_KEY, v)
   }
+  const toggleScenarios = () => {
+    setShowScenarios((value) => {
+      localStorage.setItem(COMPARE_KEY, value ? "0" : "1")
+      return !value
+    })
+  }
 
   const cur = summary?.base_currency ?? "USD"
 
@@ -181,14 +199,14 @@ export default function Dashboard() {
             Здесь видно, какой период уже обеспечен, сколько свободного ресурса остаётся над подушкой и что благодаря этому стало возможным.
           </SectionHelp>
           <div role="alert" className="rounded-xl bg-card px-5 py-6 ring-1 ring-foreground/10 sm:px-7">
-            <h2 className="text-lg font-semibold">Не удалось загрузить прогноз</h2>
-            <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-ink-2">
+            <h2 className="text-[15.5px] font-semibold">Не удалось загрузить прогноз</h2>
+            <p className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-ink-2">
               Данные не изменены. Попробуйте загрузить денежную картину ещё раз.
             </p>
             <button
               type="button"
               onClick={() => setHorizonRevision((revision) => revision + 1)}
-              className="touch-target mt-4 inline-flex h-9 items-center rounded-[9px] bg-primary px-3.5 text-[13.5px] font-medium text-primary-foreground"
+              className="touch-target mt-4 inline-flex h-9 items-center rounded-[9px] bg-primary px-3.5 text-[13px] font-medium text-primary-foreground"
             >
               Повторить
             </button>
@@ -201,103 +219,96 @@ export default function Dashboard() {
 
   if (!summary || !forecast) return <PageSkeleton label="Загружаю денежную картину" />
 
-  // ----- позитивная модель экрана: обеспеченность → свободный ресурс → возможность -----
+  // ----- вердикт: что с подушкой и КОГДА -----
   const balance = summary.t0
   const incomePerMonthValue = supportingReady && income ? incomePerMonth(income) : null
   const expensesPerMonth = supportingReady ? expenses?.required_monthly_income ?? null : null
   const free = incomePerMonthValue != null && expensesPerMonth != null ? incomePerMonthValue - expensesPerMonth : null
 
   const hasStartingBalance = summary.last_snapshot_date != null
+  const hasCompleteRates = summary.missing_rates.length === 0
   const scenarioMeta = summary.scenarios[scenario]
   const minTotal = scenarioMeta.min_total
-  const hasFreshSnapshot = hasStartingBalance && !summary.snapshot_stale
-  const hasCompleteRates = summary.missing_rates.length === 0
-  const dataReady = hasFreshSnapshot && hasCompleteRates && minTotal != null
-  const rawHeadroom = minTotal != null ? minTotal - summary.cushion : 0
-  const headroom = dataReady ? rawHeadroom : 0
-  const horizonCovered = dataReady && scenarioMeta.cushion_breach_date == null && rawHeadroom >= 0
-  const periodHeadline = PERIOD_HEADLINE[period] ?? `План на ${PERIODS.find((p) => p.value === period)?.label ?? "период"} обеспечен`
-  const heroHeadline = !hasStartingBalance
-    ? "Здесь появится ваш финансовый простор"
-    : !dataReady
-      ? "Картина возможностей уточняется"
-    : horizonCovered
-      ? periodHeadline
-      : "Большая часть горизонта уже обеспечена"
-  const heroDetail = !hasStartingBalance
-    ? "Добавьте актуальный баланс — finplan покажет обеспеченный период, свободный ресурс и доступные мечты."
-    : summary.snapshot_stale
-      ? "Обновите остатки на счетах — после этого finplan заново проверит обеспеченный период и свободный ресурс."
-      : !hasCompleteRates
-        ? `Добавьте курс для ${summary.missing_rates.join(", ")} — после этого свободный ресурс будет посчитан полностью.`
-        : minTotal == null
-          ? "Прогноз ещё не содержит полной картины горизонта. Попробуйте обновить его чуть позже."
-    : horizonCovered
-      ? `На всём пути остаётся не меньше ${money(minTotal ?? 0)} ${cur}. Подушка ${money(summary.cushion)} ${cur} сохраняется.`
-      : `Чтобы сохранить подушку на всём горизонте, плану нужно ещё ${money(Math.max(0, -rawHeadroom))} ${cur}.`
-  const statusText = !hasStartingBalance
-    ? "Нужен стартовый баланс"
-    : summary.snapshot_stale
-      ? "Обновите остатки"
-      : !hasCompleteRates
-        ? "Нужны все курсы"
-        : minTotal == null
-          ? "Прогноз уточняется"
-          : horizonCovered
-            ? "Подушка сохраняется"
-            : "План можно усилить"
+  const breachDate = scenarioMeta.cushion_breach_date
+  // Устаревший снимок — оговорка о свежести, а не блокер: числа посчитаны верно, просто
+  // измерены N дней назад. Он живёт одной строкой в мета-линии и НЕ переписывает вердикт.
+  // Недостающий курс — другое дело: без него часть счетов приводится к нулю, и вердикт
+  // был бы неправдой, поэтому его по-прежнему придерживаем.
+  const dataReady = hasStartingBalance && hasCompleteRates && minTotal != null
+  const headroom = dataReady && minTotal != null ? minTotal - summary.cushion : null
+  const horizonCovered = dataReady && breachDate == null && (headroom ?? 0) >= 0
+  const periodLabel = PERIODS.find((p) => p.value === period)?.label ?? "период"
 
-  // ----- ближайшие 30 дней: позитивное движение без потери фактической точности -----
+  const verdict = !hasStartingBalance
+    ? "Здесь появится ваш финансовый простор"
+    : !hasCompleteRates
+      ? `Нужен курс для ${summary.missing_rates.join(", ")} — без него простор считается не полностью`
+      : minTotal == null
+        ? "Прогноз пока не покрывает весь горизонт"
+        : horizonCovered
+          ? `Подушка держится ${periodLabel} · минимум ${money(minTotal)} ${cur}`
+          : breachDate != null
+            ? `Подушка пробита ${ddmm(breachDate)} · не хватает ${money(Math.abs(headroom ?? 0))} ${cur}`
+            : `Минимум за период ниже подушки на ${money(Math.abs(headroom ?? 0))} ${cur}`
+
+  const snapshotAge = summary.last_snapshot_date ? daysSince(summary.last_snapshot_date) : null
+
+  // ----- ближайшие 30 дней: одна хронологическая лента -----
   const today = todayIso()
   const next30Iso = addDaysIso(today, 30)
-  const expectedRows = supportingReady ? inflows
+  const expectedRows: FlowEvent[] = supportingReady ? inflows
     .filter((i) => i.status === "expected")
     .flatMap((i) => occurrencesInRange(
       i.expected_date, i.recurrence, today, next30Iso, i.recurrence_end,
     ).map((date) => ({ date, name: i.name, amount: conv(i.amount, i.currency) })))
-    .filter((r): r is { date: string; name: string; amount: number } => r.amount != null)
-    .sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount) : []
+    .filter((r): r is FlowEvent => r.amount != null) : []
   const expectedNext30 = supportingReady
     ? expectedRows.reduce((sum, row) => sum + row.amount, 0)
     : null
 
-  const upcomingOut = supportingReady ? obligations
+  const upcomingOut: FlowEvent[] = supportingReady ? obligations
     .filter((o) => o.status === "planned")
     .flatMap((o) => occurrencesInRange(
       o.due_date, o.recurrence, today, next30Iso, o.recurrence_end,
     ).map((date) => {
       const amt = conv(o.remaining_amount > 0 ? o.remaining_amount : o.amount, o.currency)
-      return amt != null ? { date, name: o.name, amount: amt } : null
+      return amt != null ? { date, name: o.name, amount: -amt } : null
     }))
-    .filter((x): x is { date: string; name: string; amount: number } => x !== null)
-    .sort((a, b) => a.date.localeCompare(b.date)) : []
-  const upcomingOut30 = upcomingOut
+    .filter((x): x is FlowEvent => x !== null) : []
   const outgoingNext30 = supportingReady
-    ? upcomingOut30.reduce((sum, row) => sum + row.amount, 0)
+    ? upcomingOut.reduce((sum, row) => sum + Math.abs(row.amount), 0)
     : null
   const plannedDelta = expectedNext30 != null && outgoingNext30 != null
     ? expectedNext30 - outgoingNext30
     : null
 
+  // Режем по величине, а НЕ по дате: срез по дате прятал самое крупное обязательство
+  // месяца, оставляя подытог, который не сходится с видимыми строками.
+  const flowEvents = [...expectedRows, ...upcomingOut]
+  const shownFlow = [...flowEvents]
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    .slice(0, FLOW_ROWS)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const hiddenFlow = flowEvents.length - shownFlow.length
+  const hiddenFlowSum = flowEvents.reduce((sum, row) => sum + row.amount, 0)
+    - shownFlow.reduce((sum, row) => sum + row.amount, 0)
+
   const priorityRank: Record<WishItem["priority"], number> = { high: 0, medium: 1, low: 2 }
   const activeWishes = supportingReady ? [...(wishes?.items ?? [])].sort(
     (a, b) => (priorityRank[a.priority] - priorityRank[b.priority]) || (a.sort_order - b.sort_order),
   ) : []
-  const affordableWish = dataReady ? activeWishes.find((wish) => wish.amount_base <= headroom) : undefined
+  const affordableWish = headroom != null ? activeWishes.find((wish) => wish.amount_base <= headroom) : undefined
   const nearestWish = [...activeWishes].sort(
-    (a, b) => Math.max(0, a.amount_base - headroom) - Math.max(0, b.amount_base - headroom),
+    (a, b) => Math.max(0, a.amount_base - (headroom ?? 0)) - Math.max(0, b.amount_base - (headroom ?? 0)),
   )[0]
   const spotlightWish = affordableWish ?? nearestWish ?? null
-  const wishIsAffordable = dataReady && spotlightWish != null && spotlightWish.amount_base <= headroom
-  const wishResourceAfter = spotlightWish ? Math.max(0, headroom - spotlightWish.amount_base) : 0
+  const wishIsAffordable = headroom != null && spotlightWish != null && spotlightWish.amount_base <= headroom
 
   const primaryAction = !hasStartingBalance
     ? { to: "/balance", label: "Записать баланс" }
-    : summary.snapshot_stale
-      ? { to: "/balance", label: "Обновить баланс" }
-      : summary.missing_rates.length > 0
-        ? { to: "/settings", label: "Добавить курс" }
-        : { to: "/income", label: horizonCovered ? "Добавить поступление" : "Укрепить план" }
+    : summary.missing_rates.length > 0
+      ? { to: "/settings", label: "Добавить курс" }
+      : { to: "/income", label: "Добавить поступление" }
 
   // ----- цвета графика (читаем токены темы; themeTick форсит пересчёт) -----
   void themeTick
@@ -307,6 +318,7 @@ export default function Dashboard() {
   const colRed = cssVar("--red")
   const colAxis = cssVar("--chart-axis")
   const selectedLineColor = scenario === "pessimistic" ? colAmber : colGreen
+  const breachInRange = breachDate != null && chartData.some((row) => row.date === breachDate)
 
   return (
     <div className="flex flex-col gap-6">
@@ -314,121 +326,145 @@ export default function Dashboard() {
         <SectionHelp route="/" title="Финансовый простор" defaultOpen={false}>
           Здесь видно, какой период уже обеспечен, сколько свободного ресурса остаётся над подушкой и что благодаря этому стало возможным.
         </SectionHelp>
-        <Link
-          to={primaryAction.to}
-          className="touch-target inline-flex h-9 shrink-0 items-center gap-2 rounded-[9px] bg-primary px-3.5 text-[13.5px] font-medium text-primary-foreground transition-[filter] hover:brightness-105"
-        >
-          <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-          {primaryAction.label}
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Период стоит рядом с вердиктом и метриками, потому что задаёт их значение. */}
+          <Select value={String(period)} onValueChange={(v) => changePeriod(Number(v))}>
+            <SelectTrigger className="h-9 rounded-[9px]" aria-label="Период прогноза">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIODS.map((p) => (
+                <SelectItem key={p.value} value={String(p.value)}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Link
+            to={primaryAction.to}
+            className="touch-target inline-flex h-9 shrink-0 items-center gap-2 rounded-[9px] bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-[filter] hover:brightness-105"
+          >
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            {primaryAction.label}
+          </Link>
+        </div>
       </div>
 
-      <OnboardingChecklist summary={summary} />
-
-      {summary.snapshot_stale && (
-        <div className="rounded-lg border border-warn/40 bg-warn-soft px-4 py-2.5 text-sm text-warn">
-          {summary.last_snapshot_date
-            ? <>Обновите остатки: последний снимок — {ddmm(summary.last_snapshot_date)}. Тогда картина возможностей будет точнее.</>
-            : <>Добавьте стартовый баланс, чтобы увидеть обеспеченный период и свободный ресурс.</>}
-        </div>
-      )}
-      {summary.missing_rates.length > 0 && (
-        <div className="rounded-lg border border-warn/40 bg-warn-soft px-4 py-2.5 text-sm text-warn">
-          Добавьте курс для {summary.missing_rates.join(", ")} — после этого свободный ресурс будет посчитан полностью.
-        </div>
-      )}
-
-      <section className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10" aria-labelledby="dashboard-space-title">
-        <div className="grid lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,.55fr)]">
-          <div className="px-4 py-5 sm:px-6 sm:py-6">
-            <div className="mb-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-              <span className={cn(
-                "inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-[3px] text-[11.5px] font-semibold",
-                !dataReady ? "bg-card-2 text-ink-2" : horizonCovered ? "bg-pos-soft text-pos" : "bg-warn-soft text-warn",
-              )}>
-                <span className={cn("size-[6px] rounded-full", !dataReady ? "bg-ink-3" : horizonCovered ? "bg-pos" : "bg-warn")} />
-                {statusText}
-              </span>
-              <span className="text-[11.5px] text-ink-3 tabular-nums">
-                {summary.last_snapshot_date
-                  ? <>Снимок {ddmm(summary.last_snapshot_date)} · курсы {ddmm(summary.rates_date)}</>
-                  : <>Прогноз обновится после первого снимка</>}
-              </span>
-            </div>
-            <h2
-              id="dashboard-space-title"
-              className={cn(
-                "max-w-[34ch] text-[21px] font-semibold leading-[1.2] tracking-[-0.02em] text-balance sm:text-[24px]",
-                !dataReady && "text-ink-3",
-              )}
-            >
-              {heroHeadline}
-            </h2>
-            <p className="mt-2 max-w-[66ch] text-[13.5px] leading-relaxed text-ink-2">{heroDetail}</p>
-          </div>
-
-          <div className={cn(
-            "flex flex-col gap-2 border-t border-line-2 px-4 py-5 sm:px-6 sm:py-6 lg:border-t-0 lg:border-l",
-            horizonCovered ? "bg-pos-soft" : "bg-card-2/70",
-          )}>
-            <div className={cn("text-[11.5px] font-medium", horizonCovered ? "text-pos" : "text-ink-3")}>Свободный ресурс</div>
-            <div className="text-[26px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[30px]">
-              {money(Math.max(0, headroom))}{" "}
-              <span className={cn("text-[13px] font-medium", horizonCovered ? "text-pos" : "text-ink-3")}>{cur}</span>
-            </div>
-            <p className={cn("mt-auto max-w-[34ch] pt-2 text-[12.5px] leading-relaxed", horizonCovered ? "text-pos" : "text-ink-2")}>
-              {horizonCovered
-                ? "Можно направить, сохраняя подушку на всём горизонте."
-                : dataReady
-                  ? "Появится здесь, когда план будет держаться выше подушки."
-                  : hasStartingBalance
-                    ? "Появится после актуального снимка и всех нужных курсов."
-                    : "Появится после стартового баланса."}
-            </p>
+      {/* Один инструмент: вердикт + свежесть + четыре сходящихся числа. */}
+      <section className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10" aria-labelledby="dashboard-verdict">
+        <div className="px-4 py-5 sm:px-6">
+          <h2
+            id="dashboard-verdict"
+            className={cn(
+              "max-w-[40ch] text-[21px] font-semibold leading-[1.2] tracking-[-0.02em] text-balance sm:text-[24px]",
+              !dataReady && "text-ink-2",
+            )}
+          >
+            {verdict}
+          </h2>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-ink-3 tabular-nums">
+            {summary.last_snapshot_date ? (
+              summary.snapshot_stale ? (
+                <Link
+                  to="/balance"
+                  className="touch-target inline-flex min-h-6 items-center gap-1.5 rounded-md bg-warn-soft px-2 py-[3px] font-medium text-warn"
+                >
+                  <span className="size-[6px] rounded-full bg-warn" />
+                  Снимок {ddmm(summary.last_snapshot_date)} · {snapshotAge} дн. назад · обновить
+                </Link>
+              ) : (
+                <span>Снимок {ddmm(summary.last_snapshot_date)}</span>
+              )
+            ) : (
+              <Link to="/balance" className="touch-target inline-flex min-h-6 items-center font-medium underline underline-offset-4">
+                Добавить стартовый баланс
+              </Link>
+            )}
+            <span>курсы {ddmm(summary.rates_date)}</span>
+            <span>{SCEN_LABEL[scenario]} сценарий</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 border-t border-line-2 bg-card-2/45">
-          <div className="px-4 py-3 sm:px-6">
-            <div className="min-h-8 text-[11.5px] font-medium text-ink-3 sm:min-h-0">Сейчас</div>
+        {/* Порядок группирует: слева — СКОЛЬКО ЕСТЬ (запасы), справа — КАК МЕНЯЕТСЯ (потоки).
+            Окно уехало в саму подпись: без него четыре числа читались как одна величина
+            в четырёх видах, а −1 410 рядом с +1 320 выглядело противоречием. */}
+        <div className="grid grid-cols-2 border-t border-line-2 bg-card-2/45 sm:grid-cols-4">
+          <div className="border-b border-line-2 px-4 py-3 sm:border-b-0 sm:px-5" title={`Сумма по всем счетам (${accounts.length}) в базовой валюте, снимок от ${ddmm(summary.last_snapshot_date)}`}>
+            <div className="text-[11.5px] font-medium text-ink-3">Есть сейчас</div>
             <div className="mt-1 text-[17px] font-semibold tracking-[-0.015em] tabular-nums sm:text-[19px]">
-              {money(balance)} <span className="text-xs font-medium text-ink-3">{cur}</span>
-            </div>
-            <div className="mt-1 hidden text-[11px] text-ink-3 sm:block">
-              {supportingReady
-                ? accounts.length
-                  ? `${accounts.length} ${accounts.length === 1 ? "счёт" : "счетов"}`
-                  : "счета не добавлены"
-                : "детали загружаются"}
+              {money(balance)} <span className="text-[11.5px] font-medium text-ink-3">{cur}</span>
             </div>
           </div>
-          <div className="border-l border-line-2 px-4 py-3 sm:px-6">
-            <div className="min-h-8 text-[11.5px] font-medium text-ink-3 sm:min-h-0">Свободно / мес</div>
+          <div className="border-b border-l border-line-2 px-4 py-3 sm:border-b-0 sm:px-5" title="Самая низкая точка прогноза за выбранный период минус подушка. Столько можно потратить, не пробив подушку.">
+            <div className="text-[11.5px] font-medium text-ink-3">Свободно над подушкой · {periodLabel}</div>
             <div className={cn(
               "mt-1 text-[17px] font-semibold tracking-[-0.015em] tabular-nums sm:text-[19px]",
-              free != null && free >= 0 ? "text-pos" : free != null ? "text-warn" : "",
+              headroom != null && (headroom >= 0 ? "text-pos" : "text-warn"),
             )}>
-              {free != null ? `${free >= 0 ? "+" : "−"}${money(Math.abs(free))}` : "—"} <span className="text-xs font-medium">{cur}</span>
+              {headroom != null ? signed(headroom) : "—"} <span className="text-[11.5px] font-medium text-ink-3">{cur}</span>
             </div>
-            <div className="mt-1 hidden text-[11px] text-ink-3 sm:block">после всех регулярных расходов</div>
           </div>
-          <div className="border-l border-line-2 px-4 py-3 sm:px-6">
-            <div className="min-h-8 text-[11.5px] font-medium text-ink-3 sm:min-h-0">Ожидается / 30 дней</div>
-            <div className="mt-1 text-[17px] font-semibold tracking-[-0.015em] text-pos tabular-nums sm:text-[19px]">
-              {expectedNext30 != null
-                ? <>+{money(expectedNext30)} <span className="text-xs font-medium">{cur}</span></>
-                : "—"}
+          <div className="border-line-2 px-4 py-3 sm:border-l sm:px-5" title="Постоянные доходы минус постоянные расходы. Ритм, а не конкретные даты.">
+            <div className="text-[11.5px] font-medium text-ink-3">Регулярно · в месяц</div>
+            <div className={cn(
+              "mt-1 text-[17px] font-semibold tracking-[-0.015em] tabular-nums sm:text-[19px]",
+              free != null && (free >= 0 ? "text-pos" : "text-warn"),
+            )}>
+              {free != null ? signed(free) : "—"} <span className="text-[11.5px] font-medium text-ink-3">{cur}</span>
             </div>
-            <div className="mt-1 hidden text-[11px] text-ink-3 sm:block">уже запланированные поступления</div>
+          </div>
+          <div className="border-l border-line-2 px-4 py-3 sm:px-5" title="Конкретные запланированные поступления минус списания в ближайшие 30 дней — то, что перечислено в ленте ниже.">
+            <div className="text-[11.5px] font-medium text-ink-3">Запланировано · 30 дней</div>
+            <div className={cn(
+              "mt-1 text-[17px] font-semibold tracking-[-0.015em] tabular-nums sm:text-[19px]",
+              plannedDelta != null && (plannedDelta >= 0 ? "text-pos" : "text-warn"),
+            )}>
+              {plannedDelta != null ? signed(plannedDelta) : "—"} <span className="text-[11.5px] font-medium text-ink-3">{cur}</span>
+            </div>
           </div>
         </div>
       </section>
 
+      {/* Мечта — строка, а не витрина: связь «свободный ресурс → что стало возможным» без 374px фотографии. */}
+      {supportingReady && (
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px]">
+          {spotlightWish ? (
+            <>
+              {spotlightWish.image_url && (
+                <img
+                  src={spotlightWish.image_url} alt="" width={32} height={32} loading="lazy" decoding="async"
+                  className="size-8 shrink-0 rounded-md object-cover"
+                />
+              )}
+              <span className="text-ink-3">Ближайшая цель</span>
+              <span className="font-medium">{spotlightWish.name}</span>
+              <span className="tabular-nums text-ink-2">{money(spotlightWish.amount_base)} {cur}</span>
+              <span className={cn("font-medium", wishIsAffordable ? "text-pos" : "text-ink-3")}>
+                {headroom == null
+                  ? "сверим после курсов"
+                  : wishIsAffordable
+                    ? "Уже по карману"
+                    : `не хватает ${money(spotlightWish.amount_base - headroom)} ${cur}`}
+              </span>
+              {wishIsAffordable && headroom != null && (
+                <span className="text-ink-3 tabular-nums">
+                  останется {money(headroom - spotlightWish.amount_base)} {cur}
+                </span>
+              )}
+              <Link className="touch-target inline-flex min-h-6 items-center font-medium underline underline-offset-4" to="/wishes">Все мечты</Link>
+            </>
+          ) : (
+            <>
+              <span className="text-ink-3">Мечт пока нет — finplan свяжет их стоимость со свободным ресурсом.</span>
+              <Link className="touch-target inline-flex min-h-6 items-center font-medium underline underline-offset-4" to="/wishes">Добавить мечту</Link>
+            </>
+          )}
+        </div>
+      )}
+
       {supportingError && (
         <div role="alert" className="flex flex-col gap-3 rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
-            <h2 className="text-sm font-semibold">Часть данных не загрузилась</h2>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
+            <h2 className="text-[13px] font-semibold">Часть данных не загрузилась</h2>
+            <p className="mt-1 max-w-[62ch] text-[11.5px] leading-relaxed text-ink-3">
               Прогноз сохранён. Поступления, обязательства и мечты пока показаны без чисел, чтобы не выдавать сбой за ноль.
             </p>
           </div>
@@ -442,66 +478,49 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(290px,.45fr)]">
-      {/* Прогноз доказывает позитивный тезис; сравнение сценариев остаётся по запросу. */}
-      <Card className="order-2 gap-0 p-0 lg:order-1">
-        <div className="flex flex-wrap items-start justify-between gap-3.5 px-5 pt-5 pb-2 sm:px-6">
-          <div>
-            <h2 className="text-[15.5px] font-semibold tracking-tight">Как движутся деньги</h2>
-            <p className="mt-0.5 text-[12.5px] text-ink-3">
-              {horizonCovered
-                ? `Подушка сохраняется · ${SCEN_LABEL[scenario]} сценарий`
-                : `${PERIODS.find((p) => p.value === period)?.label} · ${SCEN_LABEL[scenario]} сценарий`}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              aria-expanded={showScenarios}
-              onClick={() => setShowScenarios((value) => !value)}
-              className="touch-target rounded-[9px] border border-border bg-card px-3 py-1.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:bg-card-2 hover:text-foreground"
-            >
-              {showScenarios ? "Скрыть сравнение" : "Сравнить сценарии"}
-            </button>
-            <Select value={String(period)} onValueChange={(v) => changePeriod(Number(v))}>
-              <SelectTrigger className="h-[33px] rounded-[9px]" aria-label="Период прогноза">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PERIODS.map((p) => (
-                  <SelectItem key={p.value} value={String(p.value)}>{p.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Доказательство вердикта. Период задаётся выше — здесь только сценарии. */}
+      <Card className="gap-0 p-0">
+        <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 pb-2 sm:px-6">
+          <h2 className="text-[15.5px] font-semibold tracking-tight">Как движутся деньги</h2>
+          <button
+            type="button"
+            aria-expanded={showScenarios}
+            onClick={toggleScenarios}
+            className="touch-target rounded-[9px] border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-ink-2 transition-colors hover:bg-card-2 hover:text-foreground"
+          >
+            {showScenarios ? "Скрыть сравнение" : "Сравнить сценарии"}
+          </button>
         </div>
 
         {showScenarios && (
           <div className="mx-5 mt-2 flex w-fit max-w-[calc(100%-2.5rem)] gap-px overflow-x-auto rounded-[9px] border border-border bg-card-2 p-[3px] sm:mx-6">
-              {(["base", "optimistic", "pessimistic"] as Scenario[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => changeScenario(s)}
-                  className={cn(
-                    "rounded-md px-2.5 py-[5px] text-[12.5px] font-medium whitespace-nowrap transition-colors",
-                    scenario === s ? "bg-card text-foreground shadow-sm" : "text-ink-3 hover:text-ink-2",
-                  )}
-                >
-                  {s === "base" ? "Базовый" : s === "optimistic" ? "Оптимистичный" : "Осторожный"}
-                </button>
-              ))}
+            {(["base", "optimistic", "pessimistic"] as Scenario[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => changeScenario(s)}
+                className={cn(
+                  "rounded-md px-2.5 py-[5px] text-[13px] font-medium whitespace-nowrap transition-colors",
+                  scenario === s ? "bg-card text-foreground shadow-sm" : "text-ink-3 hover:text-ink-2",
+                )}
+              >
+                {s === "base" ? "Базовый" : s === "optimistic" ? "Оптимистичный" : "Осторожный"}
+              </button>
+            ))}
           </div>
         )}
 
+        {/* Имя графика живёт на контейнере; сам svg выведен из tab-порядка (tabIndex=-1),
+            поэтому фокус больше не попадает на безымянный узел recharts. */}
         <div
-          className="px-3 pb-2"
+          className="px-3 pt-2 pb-4"
           role="img"
-          aria-label={`Прогноз баланса на ${period} дней — ${SCEN_LABEL[scenario]} сценарий`}
+          aria-label={`Прогноз баланса на ${period} дней — ${SCEN_LABEL[scenario]} сценарий, подушка ${money(forecast?.cushion ?? summary.cushion)} ${cur}`}
         >
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart
               data={chartData}
               margin={{ top: 16, right: 12, bottom: 4, left: 0 }}
+              tabIndex={-1}
             >
               <defs>
                 <linearGradient id="dashArea" x1="0" y1="0" x2="0" y2="1">
@@ -524,17 +543,17 @@ export default function Dashboard() {
                 contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)", fontSize: 12 }}
               />
 
-              <ReferenceArea y1={0} y2={-1e12} fill={colRed} fillOpacity={0.06} ifOverflow="hidden" />
+              <ReferenceArea y1={0} y2={-1e12} fill={colRed} fillOpacity={0.09} ifOverflow="hidden" />
               <ReferenceLine y={0} stroke={colAxis} strokeWidth={1} ifOverflow="extendDomain" />
 
               {/* мягкая заливка под выбранной линией */}
               <Area type="monotone" dataKey={scenario} stroke="none" fill="url(#dashArea)" isAnimationActive={false} />
 
-              {/* линия-подушка */}
+              {/* линия-подушка; подпись слева-снизу — справа её пересекала кривая */}
               <ReferenceLine
                 y={forecast?.cushion ?? summary.cushion} stroke={colAmber}
                 strokeWidth={1.3} strokeDasharray="6 6"
-                label={{ value: "Подушка", position: "insideTopRight", fill: colAmber, fontSize: 11, fontWeight: 600 }}
+                label={{ value: "Подушка", position: "insideBottomLeft", fill: colAmber, fontSize: 11, fontWeight: 600 }}
               />
 
               {showScenarios ? (
@@ -554,178 +573,78 @@ export default function Dashboard() {
                   strokeWidth={2.8} dot={false} isAnimationActive={false} />
               )}
 
-              {/* Единственный временной маркер: сегодня. Минимум остаётся в итоговой цифре, а не становится тревожным центром графика. */}
+              {/* Дата из вердикта должна находиться на кривой, а не только в тексте. */}
+              {breachInRange && (
+                <ReferenceDot
+                  x={breachDate as string} y={forecast?.cushion ?? summary.cushion} r={4}
+                  fill={colAmber} stroke={cssVar("--card") || "#fff"} strokeWidth={2}
+                />
+              )}
+
               <ReferenceLine x={chartData[0]?.date} stroke={colAxis} strokeWidth={1.2} strokeDasharray="3 3" strokeOpacity={0.5}
                 label={{ value: "Сегодня", position: "insideTopLeft", fill: colAxis, fontSize: 11, fontWeight: 600 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-1 pb-4 text-xs text-ink-3 sm:px-6">
-          <span>
-            {horizonCovered
-              ? <>Свободный ресурс: <b className="font-semibold text-pos">{money(headroom)} {cur}</b></>
-              : <>Подушка: {money(forecast?.cushion ?? summary.cushion)} {cur}</>}
-          </span>
-          <span>Показан {SCEN_LABEL[scenario]} прогноз</span>
-        </div>
       </Card>
 
-      <aside className="order-1 flex min-h-[340px] flex-col overflow-hidden rounded-xl bg-card-2 ring-1 ring-foreground/10 lg:order-2" aria-labelledby="dashboard-possibility">
-        {spotlightWish?.image_url ? (
-          <div className="relative min-h-[150px] flex-1 overflow-hidden">
-            <img src={spotlightWish.image_url} alt="" className="absolute inset-0 size-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent" />
-            {/* Подпись на своей плашке, а не на голом фото: на светлом кадре
-                (небо, снег) белый текст по градиенту падал до 1.14:1. */}
-            <div className="absolute right-4 bottom-3 left-4">
-              <span className="inline-block max-w-full truncate rounded-md bg-black/60 px-2 py-[3px] text-[11.5px] font-medium text-white">
-                {spotlightWish.category ?? "Личная цель"}
-              </span>
-            </div>
+      {/* Одна хронологическая лента: приход и расход вперемешку, крупное не может выпасть. */}
+      <section className="border-y border-line-2 py-5" aria-labelledby="dashboard-next-30">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="dashboard-next-30" className="text-[15.5px] font-semibold tracking-tight">Ближайшие 30 дней</h2>
+          <p className="text-[11.5px] text-ink-3 tabular-nums">
+            {ddmm(today)}–{ddmm(next30Iso)}
+            {expectedNext30 != null && outgoingNext30 != null
+              ? <> · +{money(expectedNext30)} / −{money(outgoingNext30)} {cur}</>
+              : null}
+          </p>
+        </div>
+
+        {/* Две колонки — это ОДНА лента, свёрнутая пополам: порядок, срез и остаток
+            считаются до раскладки, поэтому крупное событие не может выпасть за колонку. */}
+        {shownFlow.length ? (
+          <div className="mt-3 lg:columns-2 lg:gap-x-10">
+            {shownFlow.map((row) => (
+              <div key={`${row.date}-${row.name}-${row.amount}`} className="flex items-center justify-between gap-3 break-inside-avoid border-b border-line-2 py-[7px] last:border-b-0">
+                <div className="flex min-w-0 items-baseline gap-3">
+                  <span className="w-[42px] shrink-0 text-[11.5px] text-ink-3 tabular-nums">{ddmm(row.date)}</span>
+                  <span className="truncate text-[13px] text-ink-2">{row.name}</span>
+                </div>
+                <span className={cn(
+                  "shrink-0 text-[13px] font-semibold tabular-nums",
+                  row.amount >= 0 ? "text-pos" : "text-foreground",
+                )}>
+                  {signed(row.amount)} {cur}
+                </span>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="flex min-h-[132px] flex-1 items-center justify-center bg-pos-soft text-pos">
-            <Sparkles className="size-10" strokeWidth={1.25} aria-hidden="true" />
+          <p className="mt-3 text-[13px] text-ink-3">
+            {supportingReady
+              ? "Запланированных событий на этот период нет."
+              : supportingError
+                ? "Движение временно не загружено."
+                : "Загружаю движение…"}
+          </p>
+        )}
+
+        {/* Срез не исчезает молча: остаток назван числом на всю ширину ленты. */}
+        {hiddenFlow > 0 && (
+          <div className="mt-2 flex items-center justify-between gap-3 border-t border-line-2 pt-2 text-[11.5px] text-ink-3 tabular-nums">
+            <span>Ещё {hiddenFlow}</span>
+            <span>{signed(hiddenFlowSum)} {cur}</span>
           </div>
         )}
-        <div className="flex flex-col px-5 py-5">
-          <div id="dashboard-possibility" className="text-xs font-semibold text-pos">
-            {!supportingReady
-              ? supportingError
-                ? "Детали временно недоступны"
-                : "Загружаю возможности"
-              : spotlightWish
-              ? !dataReady
-                ? "После уточнения данных"
-                : wishIsAffordable
-                  ? "Уже по карману"
-                  : "Ближе всего"
-              : "Что становится возможным"}
-          </div>
-          {!supportingReady ? (
-            <>
-              <h2 className="mt-1.5 text-[19px] font-semibold leading-snug tracking-[-0.02em]">
-                {supportingError ? "Не удалось сверить мечты" : "Сверяю мечты с ресурсом"}
-              </h2>
-              <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
-                {supportingError
-                  ? "Повторите загрузку деталей — до этого finplan не будет подменять неизвестные данные пустым списком."
-                  : "Ещё мгновение — и здесь появится ближайшая доступная возможность."}
-              </p>
-            </>
-          ) : spotlightWish ? (
-            <>
-              <h2 className="mt-1.5 text-[19px] font-semibold leading-snug tracking-[-0.02em]">{spotlightWish.name}</h2>
-              <div className="mt-2 text-sm font-semibold tabular-nums">
-                {money(spotlightWish.amount_base)} {cur}
-              </div>
-              <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
-                {!dataReady
-                  ? "Обновите исходные данные — и finplan честно сопоставит мечту со свободным ресурсом."
-                  : wishIsAffordable
-                  ? `После неё останется ${money(wishResourceAfter)} ${cur} свободного ресурса над подушкой.`
-                  : `До неё осталось ${money(Math.max(0, spotlightWish.amount_base - headroom))} ${cur} свободного ресурса.`}
-              </p>
-            </>
-          ) : (
-            <>
-              <h2 className="mt-1.5 text-[19px] font-semibold leading-snug tracking-[-0.02em]">Добавьте мечту</h2>
-              <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
-                Finplan свяжет её стоимость со свободным ресурсом и покажет, когда она становится доступной.
-              </p>
-            </>
-          )}
-          {supportingReady && (
-            <Link className="mt-5 inline-flex min-h-11 w-fit items-center text-[13px] font-semibold underline underline-offset-4 sm:min-h-0" to="/wishes">
-              {spotlightWish ? "Открыть мечты" : "Добавить мечту"}
-            </Link>
-          )}
-        </div>
-      </aside>
-      </div>
 
-      <section className="border-y border-line-2 py-5" aria-labelledby="dashboard-next-30">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 id="dashboard-next-30" className="text-[15.5px] font-semibold tracking-tight">Движение ближайших 30 дней</h2>
-            <p className="mt-1 text-[12.5px] text-ink-3">{ddmm(today)}–{ddmm(next30Iso)} · только уже запланированные события</p>
-          </div>
-          <div className="sm:text-right">
-            <div className="text-xs font-medium text-ink-3">
-              {plannedDelta == null
-                ? "Детали денежного движения"
-                : plannedDelta >= 0
-                  ? "Поступления выше списаний"
-                  : "Разница поступлений и списаний"}
-            </div>
-            <div className={cn(
-              "mt-0.5 text-[19px] font-semibold tracking-[-0.015em] tabular-nums",
-              plannedDelta != null && (plannedDelta >= 0 ? "text-pos" : "text-warn"),
-            )}>
-              {plannedDelta != null
-                ? <>{plannedDelta >= 0 ? "+" : "−"}{money(Math.abs(plannedDelta))} {cur}</>
-                : "—"}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-6 md:grid-cols-2 md:gap-0">
-          <div className="md:pr-7">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-[13px] font-semibold">Приходит</h3>
-              <span className="text-sm font-semibold text-pos tabular-nums">
-                {expectedNext30 != null ? `+${money(expectedNext30)} ${cur}` : "—"}
-              </span>
-            </div>
-            {expectedRows.length ? expectedRows.slice(0, 4).map((row) => (
-              <div key={`${row.date}-${row.name}`} className="flex items-center justify-between gap-3 border-b border-line-2 py-2.5 last:border-b-0">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] text-ink-2">{row.name}</div>
-                  <div className="mt-0.5 text-[11px] text-ink-3">{ddmm(row.date)}</div>
-                </div>
-                <span className="shrink-0 text-[13px] font-semibold text-pos tabular-nums">+{money(row.amount)} {cur}</span>
-              </div>
-            )) : (
-              <p className="py-3 text-sm text-ink-3">
-                {supportingReady
-                  ? "Добавьте ожидаемое поступление — оно появится здесь и в прогнозе."
-                  : supportingError
-                    ? "Поступления временно не загружены."
-                    : "Загружаю поступления…"}
-              </p>
-            )}
-            <Link className="mt-3 inline-flex min-h-11 items-center text-[13px] font-semibold underline underline-offset-4 sm:min-h-0" to="/income">Все поступления</Link>
-          </div>
-
-          <div className="border-t border-line-2 pt-5 md:border-t-0 md:border-l md:pt-0 md:pl-7">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-[13px] font-semibold">Уже учтено в плане</h3>
-              <span className="text-sm font-semibold tabular-nums">
-                {outgoingNext30 != null ? `−${money(outgoingNext30)} ${cur}` : "—"}
-              </span>
-            </div>
-            {upcomingOut30.length ? upcomingOut30.slice(0, 4).map((row) => (
-              <div key={`${row.date}-${row.name}`} className="flex items-center justify-between gap-3 border-b border-line-2 py-2.5 last:border-b-0">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] text-ink-2">{row.name}</div>
-                  <div className="mt-0.5 text-[11px] text-ink-3">{ddmm(row.date)}</div>
-                </div>
-                <span className="shrink-0 text-[13px] font-semibold tabular-nums">−{money(row.amount)} {cur}</span>
-              </div>
-            )) : (
-              <p className="py-3 text-sm text-ink-3">
-                {supportingReady
-                  ? "Обязательных списаний на этот период пока нет."
-                  : supportingError
-                    ? "Обязательства временно не загружены."
-                    : "Загружаю обязательства…"}
-              </p>
-            )}
-            <Link className="mt-3 inline-flex min-h-11 items-center text-[13px] font-semibold underline underline-offset-4 sm:min-h-0" to="/expenses">Все обязательства</Link>
-          </div>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
+          <Link className="touch-target inline-flex min-h-11 items-center text-[13px] font-semibold underline underline-offset-4 sm:min-h-6" to="/income">Все поступления</Link>
+          <Link className="touch-target inline-flex min-h-11 items-center text-[13px] font-semibold underline underline-offset-4 sm:min-h-6" to="/expenses">Все обязательства</Link>
         </div>
       </section>
+
+      {/* Скаффолдинг первого запуска не должен вести экран, который смотрят каждый день. */}
+      <OnboardingChecklist summary={summary} />
     </div>
   )
 }
