@@ -47,7 +47,7 @@ export function RefCombo({
   return (
     <div className="flex items-center gap-2">
       <Select value={showInput ? CUSTOM : value} onValueChange={onSelect}>
-        <SelectTrigger className={width}>
+        <SelectTrigger className={width} aria-label={placeholder}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -63,6 +63,7 @@ export function RefCombo({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Новое значение"
+          aria-label={`Своё значение: ${placeholder}`}
           className="w-40"
           autoFocus
         />

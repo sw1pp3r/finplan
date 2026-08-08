@@ -1,6 +1,6 @@
 """Сборка входов forecast-движка из БД."""
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -191,11 +191,16 @@ def income_summary(db: Session):
 
 
 def wishes_summary(db: Session):
-    """Активные хотелки: список + суммы по приоритетам в базовой валюте."""
+    """Активные хотелки + отдельная датированная история исполненного."""
     settings = get_settings(db)
     rates, _ = get_rates(db, settings.base_currency)
     rows = db.scalars(
         select(Wish).where(Wish.status == "active").order_by(Wish.id.desc())
+    ).all()
+    completed_rows = db.scalars(
+        select(Wish)
+        .where(Wish.status == "completed")
+        .order_by(Wish.completed_at.desc(), Wish.id.desc())
     ).all()
     order = {"high": 0, "medium": 1, "low": 2}
     # ручной порядок (sort_order) — главный; приоритет и id — добивка для равных/изначальных.
@@ -203,21 +208,29 @@ def wishes_summary(db: Session):
     rows.sort(key=lambda w: (w.sort_order if w.sort_order is not None else 0,
                              order.get(w.priority, 1), -w.id))
 
-    items, by_priority = [], {}
-    for w in rows:
+    def payload(w: Wish):
         base = Decimal(w.amount) * rates.get(w.currency, Decimal("0"))
-        by_priority[w.priority] = by_priority.get(w.priority, Decimal("0")) + base
-        items.append({
+        return {
             "id": w.id, "name": w.name, "amount": float(w.amount), "currency": w.currency,
             "amount_base": float(base), "priority": w.priority,
             "target_date": w.target_date.isoformat() if w.target_date else None,
             "category": w.category, "note": w.note,
             "image_url": w.image_url, "image_source": w.image_source, "card_size": w.card_size,
             "sort_order": w.sort_order,
-        })
+            "status": w.status,
+            "completed_at": w.completed_at.isoformat() if w.completed_at else None,
+        }
+
+    items, by_priority = [], {}
+    for w in rows:
+        item = payload(w)
+        base = Decimal(w.amount) * rates.get(w.currency, Decimal("0"))
+        by_priority[w.priority] = by_priority.get(w.priority, Decimal("0")) + base
+        items.append(item)
     return {
         "base_currency": settings.base_currency,
         "items": items,
+        "completed_items": [payload(w) for w in completed_rows],
         "by_priority": {k: float(v) for k, v in by_priority.items()},
         "total": float(sum(by_priority.values(), Decimal("0"))),
     }
@@ -395,9 +408,350 @@ def course_summary(db: Session):
     }
 
 
-def service_summary_payload(db: Session, service_id: int):
+_TW_DRIVER_FIELDS = (
+    "instagram_accounts", "instagram_refreshes_per_month", "instagram_credits_per_refresh",
+    "instagram_results_per_refresh", "manual_instagram_full_collections",
+    "instagram_radar_runs", "instagram_credits_per_radar_run", "instagram_transcripts",
+    "instagram_published_videos", "tiktok_accounts", "tiktok_refreshes_per_month",
+    "tiktok_credits_per_refresh", "manual_tiktok_full_collections",
+    "tiktok_discovery_runs", "tiktok_credits_per_discovery_run", "tiktok_transcripts",
+    "tiktok_published_videos", "youtube_channels", "youtube_refreshes_per_month",
+    "manual_youtube_full_collections", "youtube_radar_queries", "youtube_published_videos",
+    "outcome_checks_per_video", "llm_calls", "llm_input_tokens_per_call",
+    "llm_output_tokens_per_call", "llm_annotated_videos", "llm_similarity_videos",
+    "llm_profile_rebuilds", "llm_idea_candidates", "llm_manual_calls",
+)
+
+
+def _trendwatcher_payload(config, scenario_rows, tariff_rows, generic_result, rates: dict):
+    from .trendwatcher_econ import (
+        TrendWatcherAssumptions, TrendWatcherDrivers,
+        compute_credit_topup, compute_trendwatcher,
+    )
+
+    assumptions = TrendWatcherAssumptions(
+        instagram_source=config.instagram_source,
+        scrapecreators_price_per_1000=Decimal(config.scrapecreators_price_per_1000),
+        apify_instagram_price_per_1000=Decimal(config.apify_instagram_price_per_1000),
+        apify_actor_start_usd=Decimal(config.apify_actor_start_usd),
+        provider_allowance_usd=Decimal(config.provider_allowance_usd),
+        llm_provider=config.llm_provider,
+        llm_input_usd_per_million=Decimal(config.llm_input_usd_per_million),
+        llm_output_usd_per_million=Decimal(config.llm_output_usd_per_million),
+        llm_retry_overhead_pct=Decimal(config.llm_retry_overhead_pct),
+        llm_platform_fee_pct=Decimal(config.llm_platform_fee_pct),
+    )
+    usd_rate = rates.get("USD", Decimal("0"))
+    managed_clients_total = sum(t.clients for t in tariff_rows if not t.is_byo)
+    generic_variable_monthly = (
+        generic_result.per_client_monthly + generic_result.per_unit_monthly
+    )
+    scenarios = []
+    for row in scenario_rows:
+        driver_values = {field: getattr(row, field) for field in _TW_DRIVER_FIELDS}
+        calc = compute_trendwatcher(
+            assumptions=assumptions,
+            drivers=TrendWatcherDrivers(**driver_values),
+        )
+        data_per_client_base = calc.data_provider_cost_usd * usd_rate
+        llm_per_client_base = calc.llm_cost_usd * usd_rate
+        provider_data_monthly_base = sum(
+            (Decimal("0") if tariff.is_byo else data_per_client_base * tariff.clients)
+            for tariff in tariff_rows
+        )
+        provider_llm_monthly_base = sum(
+            (Decimal("0") if tariff.is_byo else llm_per_client_base * tariff.clients)
+            for tariff in tariff_rows
+        )
+        provider_monthly_base = provider_data_monthly_base + provider_llm_monthly_base
+        payment_fee_pct = Decimal(config.payment_fee_pct) / Decimal("100")
+        payment_fee_fixed_base = Decimal(config.payment_fee_fixed_usd) * usd_rate
+        payment_fees_by_tariff = {
+            tariff.id: (
+                Decimal(tariff.price) * rates.get(tariff.currency, Decimal("0"))
+                * payment_fee_pct + payment_fee_fixed_base
+            )
+            for tariff in tariff_rows
+        }
+        payment_fees_monthly_base = sum(
+            payment_fees_by_tariff[tariff.id] * tariff.clients
+            for tariff in tariff_rows
+        )
+        contribution_monthly_base = (
+            generic_result.mrr - generic_variable_monthly
+            - payment_fees_monthly_base - provider_monthly_base
+        )
+        cogs = (
+            generic_result.fixed_monthly + generic_variable_monthly
+            + payment_fees_monthly_base + provider_monthly_base
+        )
+        net = contribution_monthly_base - generic_result.fixed_monthly
+        fixed_allocation = generic_result.fixed_monthly / max(1, generic_result.clients_total)
+        by_tariff = []
+        for tariff, base_tariff in zip(tariff_rows, generic_result.by_tariff):
+            price_base = Decimal(tariff.price) * rates.get(tariff.currency, Decimal("0"))
+            generic_var_per_client = price_base - base_tariff["net_per_client"]
+            provider_data_base = Decimal("0") if tariff.is_byo else data_per_client_base
+            provider_llm_base = Decimal("0") if tariff.is_byo else llm_per_client_base
+            provider_cogs_base = provider_data_base + provider_llm_base
+            payment_fee_base = payment_fees_by_tariff[tariff.id]
+            contribution = (
+                price_base - generic_var_per_client - payment_fee_base - provider_cogs_base
+            )
+            break_even = None
+            if contribution > 0:
+                break_even = int((generic_result.fixed_monthly / contribution).to_integral_value(
+                    rounding=ROUND_CEILING
+                ))
+            cogs_per_client = generic_var_per_client + provider_cogs_base + fixed_allocation
+            cogs_per_client += payment_fee_base
+            churn_rate = Decimal(config.monthly_churn_pct) / Decimal("100")
+            cac_base = Decimal(config.cac_per_client_usd) * usd_rate
+            cac_payback = (
+                cac_base / contribution if cac_base > 0 and contribution > 0 else None
+            )
+            ltv_contribution = (
+                contribution / churn_rate if churn_rate > 0 and contribution > 0 else None
+            )
+            ltv_cac = (
+                ltv_contribution / cac_base
+                if ltv_contribution is not None and cac_base > 0 else None
+            )
+            by_tariff.append({
+                "id": tariff.id,
+                "name": tariff.name,
+                "is_byo": tariff.is_byo,
+                "clients": tariff.clients,
+                "price_base": float(price_base),
+                "provider_cogs_usd": 0.0 if tariff.is_byo else float(calc.provider_cost_usd),
+                "provider_cogs_base": float(provider_cogs_base),
+                "provider_data_per_client_base": float(provider_data_base),
+                "provider_llm_per_client_base": float(provider_llm_base),
+                "generic_variable_per_client_base": float(generic_var_per_client),
+                "payment_fee_per_client_base": float(payment_fee_base),
+                "fixed_allocation_per_client_base": (
+                    float(fixed_allocation) if generic_result.clients_total else None
+                ),
+                "cogs_per_client_base": float(cogs_per_client),
+                "gross_margin_per_client_base": float(price_base - cogs_per_client),
+                "contribution_per_client_base": float(contribution),
+                "contribution_margin_pct": (
+                    float(contribution / price_base) if price_base > 0 else None
+                ),
+                "unit_profit_per_client_base": (
+                    float(contribution - fixed_allocation)
+                    if generic_result.clients_total else None
+                ),
+                "unit_margin_pct": (
+                    float((contribution - fixed_allocation) / price_base)
+                    if generic_result.clients_total and price_base > 0 else None
+                ),
+                "break_even_clients": break_even,
+                "cac_payback_months": float(cac_payback) if cac_payback is not None else None,
+                "ltv_contribution_base": (
+                    float(ltv_contribution) if ltv_contribution is not None else None
+                ),
+                "ltv_cac_ratio": float(ltv_cac) if ltv_cac is not None else None,
+                "net_per_client": float(
+                    price_base - generic_var_per_client - payment_fee_base - provider_cogs_base
+                ),
+            })
+        topup = compute_credit_topup(
+            monthly_demand_credits=calc.scrapecreators_credits * managed_clients_total,
+            starting_balance_credits=config.scrapecreators_credit_balance,
+            pack_credits=config.scrapecreators_pack_credits,
+            pack_price_usd=Decimal(config.scrapecreators_pack_price_usd),
+        )
+        pack_implied_price_per_1000 = (
+            topup.pack_price_usd * Decimal("1000") / Decimal(topup.pack_credits)
+        )
+        allocation_price_per_1000 = Decimal(config.scrapecreators_price_per_1000)
+        scenario_payload = {
+            "key": row.key,
+            "label": row.label,
+            "drivers": driver_values,
+            "usage": {
+                "instagram": {
+                    "requests": calc.instagram_credits,
+                    "credits": calc.instagram_credits,
+                    "refresh_credits": calc.instagram_refresh_credits,
+                    "radar_credits": calc.instagram_radar_credits,
+                    "transcript_credits": calc.transcript_credits,
+                    "outcome_credits": calc.outcome_credits,
+                    "unsupported_radar_runs": calc.unsupported_instagram_radar_runs,
+                    "cost_usd": float(calc.instagram_cost_usd + calc.apify_instagram_cost_usd),
+                },
+                "tiktok": {
+                    "requests": calc.tiktok_credits,
+                    "credits": calc.tiktok_credits,
+                    "refresh_credits": calc.tiktok_refresh_credits,
+                    "discovery_credits": calc.tiktok_discovery_credits,
+                    "transcript_credits": calc.tiktok_transcript_credits,
+                    "outcome_credits": calc.tiktok_outcome_credits,
+                    "cost_usd": float(calc.tiktok_cost_usd),
+                },
+                "apify": {
+                    "results": calc.apify_instagram_results,
+                    "actor_runs": calc.apify_actor_runs,
+                    "cost_usd": float(calc.apify_instagram_cost_usd),
+                },
+                "llm": {
+                    "provider": config.llm_provider,
+                    "calls": calc.llm_billed_calls,
+                    "base_calls": calc.llm_base_calls,
+                    "billed_calls": calc.llm_billed_calls,
+                    "breakdown": {
+                        "annotations": calc.llm_annotation_calls,
+                        "similarity_batches": calc.llm_similarity_calls,
+                        "profile": calc.llm_profile_calls,
+                        "ideas": calc.llm_idea_calls,
+                        "manual": calc.llm_manual_calls,
+                    },
+                    "input_tokens": calc.llm_input_tokens,
+                    "output_tokens": calc.llm_output_tokens,
+                    "inference_cost_usd": float(calc.llm_inference_cost_usd),
+                    "platform_fee_usd": float(calc.llm_platform_fee_usd),
+                    "cost_usd": float(calc.llm_cost_usd),
+                },
+                "youtube": {
+                    "search_calls": calc.youtube_search_calls,
+                    "general_quota_units": calc.youtube_general_quota_units,
+                    "internal_legacy_meter_units": calc.youtube_internal_meter_units,
+                    "daily_general_limit": config.youtube_daily_general_units,
+                    "daily_search_limit": config.youtube_daily_search_calls,
+                    "cost_usd": None,
+                },
+                "scrapecreators_credits": calc.scrapecreators_credits,
+                "allowance": {
+                    "limit_usd": float(config.provider_allowance_usd),
+                    "demand_usd": float(calc.allowance_demand_usd),
+                    "used_usd": float(calc.allowance_used_usd),
+                    "remaining_usd": float(calc.allowance_remaining_usd),
+                    "overage_usd": float(calc.allowance_overage_usd),
+                    "max_whole_credits": calc.allowance_max_credits,
+                },
+                "provider_cost_usd": float(calc.provider_cost_usd),
+            },
+            "capacity": {
+                "starting_balance_credits": topup.starting_balance_credits,
+                "monthly_demand_credits": topup.monthly_demand_credits,
+                "shortfall_credits": topup.shortfall_credits,
+                "pack_credits": topup.pack_credits,
+                "pack_price_usd": float(topup.pack_price_usd),
+                "packs_to_buy": topup.packs_to_buy,
+                "next_topup_cash_usd": float(topup.next_topup_cash_usd),
+                "ending_balance_credits": topup.ending_balance_credits,
+                "pack_implied_price_per_1000": float(pack_implied_price_per_1000),
+                "allocation_price_per_1000": float(allocation_price_per_1000),
+                "rate_mismatch": (
+                    abs(pack_implied_price_per_1000 - allocation_price_per_1000)
+                    > Decimal("0.0001")
+                ),
+            },
+            "economics": {
+                "mrr": float(generic_result.mrr),
+                "revenue_monthly_base": float(generic_result.mrr),
+                "generic_variable_monthly_base": float(generic_variable_monthly),
+                "payment_fees_monthly_base": float(payment_fees_monthly_base),
+                "fixed_monthly_base": float(generic_result.fixed_monthly),
+                "provider_data_monthly_base": float(provider_data_monthly_base),
+                "provider_llm_monthly_base": float(provider_llm_monthly_base),
+                "provider_monthly_base": float(provider_monthly_base),
+                "contribution_monthly_base": float(contribution_monthly_base),
+                "cogs_monthly": float(cogs),
+                "cogs_per_client": float(cogs / max(1, generic_result.clients_total)),
+                "net_monthly": float(net),
+                "operating_profit_base": float(net),
+                "margin_pct": float(net / generic_result.mrr) if generic_result.mrr else None,
+                "gross_margin_pct": (
+                    float(contribution_monthly_base / generic_result.mrr)
+                    if generic_result.mrr else None
+                ),
+                "by_tariff": by_tariff,
+            },
+        }
+        scenarios.append(scenario_payload)
+
+    active = next((s for s in scenarios if s["key"] == config.active_scenario), scenarios[0])
+    return {
+        "config": {
+            "active_scenario": config.active_scenario,
+            "instagram_source": config.instagram_source,
+            "provider_allowance_usd": float(config.provider_allowance_usd),
+            "scrapecreators_price_per_1000": float(config.scrapecreators_price_per_1000),
+            "scrapecreators_pack_price_usd": float(config.scrapecreators_pack_price_usd),
+            "scrapecreators_pack_credits": config.scrapecreators_pack_credits,
+            "scrapecreators_credit_balance": config.scrapecreators_credit_balance,
+            "apify_instagram_price_per_1000": float(config.apify_instagram_price_per_1000),
+            "apify_actor_start_usd": float(config.apify_actor_start_usd),
+            "llm_provider": config.llm_provider,
+            "llm_input_usd_per_million": float(config.llm_input_usd_per_million),
+            "llm_output_usd_per_million": float(config.llm_output_usd_per_million),
+            "llm_retry_overhead_pct": float(config.llm_retry_overhead_pct),
+            "llm_platform_fee_pct": float(config.llm_platform_fee_pct),
+            "payment_fee_pct": float(config.payment_fee_pct),
+            "payment_fee_fixed_usd": float(config.payment_fee_fixed_usd),
+            "monthly_churn_pct": float(config.monthly_churn_pct),
+            "cac_per_client_usd": float(config.cac_per_client_usd),
+            "youtube_daily_general_units": config.youtube_daily_general_units,
+            "youtube_daily_search_calls": config.youtube_daily_search_calls,
+        },
+        "pricing_basis": {
+            "scrapecreators": "verified: Freelance $1.88/1000 requests",
+            "apify": "editable assumption: rate depends on actor and subscription tier",
+            "llm": "verified Gemini 2.5 Flash token rates; editable workflow/token assumptions",
+            "commercial": "payment fees, churn and CAC are explicit editable assumptions",
+            "youtube": "non-monetary quota; current app meter also shown for drift visibility",
+        },
+        "pricing_sources": {
+            "scrapecreators": {
+                "status": "verified",
+                "label": "Freelance $1.88 / 1,000 credits",
+                "url": "https://scrapecreators.com/#pricing",
+                "checked_on": "2026-07-23",
+            },
+            "apify": {
+                "status": "assumption",
+                "label": "Редактируемая ставка выбранного actor/tier",
+                "url": "https://apify.com/apify/instagram-reel-scraper/pricing",
+                "checked_on": "2026-07-23",
+            },
+            "llm": {
+                "status": "verified",
+                "label": "Gemini 2.5 Flash Standard token rates",
+                "url": "https://ai.google.dev/gemini-api/docs/pricing",
+                "checked_on": "2026-07-23",
+            },
+            "commercial": {
+                "status": "assumption",
+                "label": "Пользовательские payment fee, churn и CAC",
+                "url": None,
+                "checked_on": None,
+            },
+            "youtube": {
+                "status": "verified",
+                "label": "Немонетарные API quota limits",
+                "url": "https://developers.google.com/youtube/v3/getting-started",
+                "checked_on": "2026-07-23",
+            },
+        },
+        "scenarios": scenarios,
+        "active": active,
+    }
+
+
+def service_summary_payload(
+    db: Session,
+    service_id: int,
+    *,
+    trendwatcher_config_override=None,
+    trendwatcher_scenario_overrides: dict[str, object] | None = None,
+):
     """Юнит-экономика одного сервиса + сравнение с breakeven. Прогноз не трогаем."""
-    from .db import Service, ServiceCost, ServiceTariff, ServiceTariffUsage
+    from .db import (
+        Service, ServiceCost, ServiceTariff, ServiceTariffUsage,
+        TrendWatcherConfig, TrendWatcherScenario,
+    )
     from .services_econ import SvcCost, SvcTariff, compute_service
 
     svc = db.get(Service, service_id)
@@ -429,39 +783,84 @@ def service_summary_payload(db: Session, service_id: int):
     exp = expenses_summary(db, precomputed=(forecast, fc_settings))
     required = exp["required_monthly_income"]
 
+    config = (
+        trendwatcher_config_override
+        if trendwatcher_config_override is not None
+        else db.get(TrendWatcherConfig, service_id)
+    )
+    trendwatcher = None
+    if config is not None:
+        scenario_rows = db.scalars(select(TrendWatcherScenario).where(
+            TrendWatcherScenario.service_id == service_id
+        ).order_by(TrendWatcherScenario.sort_order, TrendWatcherScenario.id)).all()
+        if trendwatcher_scenario_overrides:
+            scenario_rows = [
+                trendwatcher_scenario_overrides.get(row.key, row)
+                for row in scenario_rows
+            ]
+        if scenario_rows:
+            trendwatcher = _trendwatcher_payload(config, scenario_rows, tariff_rows, res, rates)
+
     cur_used = {t.currency for t in tariff_rows} | {c.currency for c in cost_rows}
+    if trendwatcher is not None:
+        cur_used.add("USD")
     missing_rates = sorted(c for c in cur_used if c not in rates)
 
     tariffs = []
+    active_by_tariff = {
+        row["id"]: row for row in (
+            trendwatcher["active"]["economics"]["by_tariff"] if trendwatcher else []
+        )
+    }
     for row, bt in zip(tariff_rows, res.by_tariff):
+        active_tariff = active_by_tariff.get(row.id)
         tariffs.append({
             "id": row.id, "name": row.name, "price": float(row.price),
             "currency": row.currency, "clients": row.clients, "is_byo": row.is_byo,
             "usage": {cid: float(u) for cid, u in usage_by_tariff.get(row.id, {}).items()},
-            "mrr_base": float(bt["mrr_base"]), "var_cost_base": float(bt["var_cost_base"]),
-            "net_per_client": float(bt["net_per_client"]),
+            "mrr_base": float(bt["mrr_base"]),
+            "var_cost_base": (float(bt["var_cost_base"])
+                              + (active_tariff["provider_cogs_base"] * row.clients
+                                 if active_tariff else 0)),
+            "net_per_client": (active_tariff["net_per_client"]
+                               if active_tariff else float(bt["net_per_client"])),
+            "provider_cogs_per_client": (active_tariff["provider_cogs_base"]
+                                         if active_tariff else 0),
+            "break_even_clients": (active_tariff["break_even_clients"]
+                                   if active_tariff else None),
         })
     costs = [{
         "id": c.id, "name": c.name, "amount": float(c.amount), "currency": c.currency,
         "kind": c.kind, "unit_label": c.unit_label, "unit_size": c.unit_size,
     } for c in cost_rows]
 
+    active_econ = trendwatcher["active"]["economics"] if trendwatcher else None
+    provider_monthly = active_econ["provider_monthly_base"] if active_econ else 0.0
+    cogs_monthly = active_econ["cogs_monthly"] if active_econ else float(res.cogs_monthly)
+    net_monthly = active_econ["net_monthly"] if active_econ else float(res.net_monthly)
+    margin_pct = active_econ["margin_pct"] if active_econ else (
+        float(res.margin_pct) if res.margin_pct is not None else None
+    )
+
     return {
-        "service": {"id": svc.id, "name": svc.name, "note": svc.note},
+        "service": {"id": svc.id, "name": svc.name, "note": svc.note,
+                    "preset_key": svc.preset_key, "preset_version": svc.preset_version},
         "base_currency": settings.base_currency,
         "mrr": float(res.mrr),
         "fixed_monthly": float(res.fixed_monthly),
         "per_client_monthly": float(res.per_client_monthly),
-        "per_unit_monthly": float(res.per_unit_monthly),
-        "cogs_monthly": float(res.cogs_monthly),
-        "net_monthly": float(res.net_monthly),
-        "margin_pct": float(res.margin_pct) if res.margin_pct is not None else None,
+        "per_unit_monthly": float(res.per_unit_monthly) + provider_monthly,
+        "provider_monthly": provider_monthly,
+        "cogs_monthly": cogs_monthly,
+        "net_monthly": net_monthly,
+        "margin_pct": margin_pct,
         "clients_total": res.clients_total,
         "required_monthly_income": required,
-        "net_vs_required": float(res.net_monthly) - required,
+        "net_vs_required": net_monthly - required,
         "missing_rates": missing_rates,
         "tariffs": tariffs,
         "costs": costs,
+        "trendwatcher": trendwatcher,
     }
 
 

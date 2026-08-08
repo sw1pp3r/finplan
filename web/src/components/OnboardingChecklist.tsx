@@ -1,91 +1,116 @@
 import { useEffect, useState } from "react"
-import { api, type Summary } from "@/lib/api"
+import { ArrowRight, Check, X } from "lucide-react"
+import { api, type Account, type Summary } from "@/lib/api"
 import { startCoach } from "@/lib/coach"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const DISMISS_KEY = "finplan-onboarding-dismissed"
 
-// Шаг чеклиста: ✓ считается из реальных данных, клик открывает коачмарк нужного шага тура
-// (индекс в COACH_STEPS), а не просто перекидывает по роуту.
-type Step = { label: string; done: boolean; coachIndex: number }
+type Step = { label: string; detail: string; done: boolean; coachIndex: number }
 
 export function OnboardingChecklist({ summary }: { summary: Summary }) {
-  const [counts, setCounts] = useState<{ accounts: number; obligations: number; inflows: number } | null>(null)
+  const [counts, setCounts] = useState<{ accounts: Account[]; obligations: number; inflows: number } | null>(null)
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === "1")
 
   useEffect(() => {
+    let alive = true
     Promise.all([
-      api.get<unknown[]>("/accounts"),
+      api.get<Account[]>("/accounts"),
       api.get<unknown[]>("/obligations"),
       api.get<unknown[]>("/inflows"),
-    ]).then(([a, o, i]) =>
-      setCounts({ accounts: a.length, obligations: o.length, inflows: i.length })
-    )
+    ])
+      .then(([a, o, i]) => {
+        if (alive) setCounts({ accounts: a, obligations: o.length, inflows: i.length })
+      })
+      .catch(() => {
+        if (alive) setCounts(null)
+      })
+    return () => {
+      alive = false
+    }
   }, [])
 
   if (dismissed || !counts) return null
 
-  // порядок — как в туре: валюта/курсы, счета, снимок, расходы, доходы.
-  // coachIndex указывает, с какого шага COACH_STEPS открыть коачмарк.
+  const hasQuickAccount = counts.accounts.some((account) => account.name === "Основной баланс")
   const steps: Step[] = [
-    { label: "Выбери базовую валюту", coachIndex: 0,
-      done: counts.accounts > 0 && summary.missing_rates.length === 0 },
-    { label: "Заведи счета", coachIndex: 1, done: counts.accounts > 0 },
-    { label: "Сделай первый снимок остатков", coachIndex: 2, done: summary.last_snapshot_date != null },
-    { label: "Добавь регулярные расходы", coachIndex: 3, done: counts.obligations > 0 },
-    { label: "Добавь доходы или ожидаемые поступления", coachIndex: 4, done: counts.inflows > 0 },
+    {
+      label: counts.accounts.length === 0 ? "Добавить стартовый счёт" : "Разбить баланс по счетам",
+      detail: counts.accounts.length === 0
+        ? "Без счёта и остатка у прогноза нет стартовой точки."
+        : "Так обновлять остатки будет быстрее и точнее.",
+      coachIndex: 1,
+      done: counts.accounts.length > 0 && !hasQuickAccount,
+    },
+    {
+      label: "Зафиксировать актуальные остатки",
+      detail: "Снимок становится стартовой точкой линии прогноза.",
+      coachIndex: 2,
+      done: summary.last_snapshot_date != null,
+    },
+    {
+      label: "Уточнить обязательные расходы",
+      detail: "Добавьте даты и отдельные платежи, которые нельзя пропустить.",
+      coachIndex: 3,
+      done: counts.obligations > 0,
+    },
+    {
+      label: "Добавить ожидаемое поступление",
+      detail: "Нерегулярные деньги попадут в прогноз с вероятностью.",
+      coachIndex: 4,
+      done: counts.inflows > 0,
+    },
+    {
+      label: "Проверить валюты",
+      detail: "Нужен курс для каждой валюты, участвующей в прогнозе.",
+      coachIndex: 0,
+      done: summary.missing_rates.length === 0,
+    },
   ]
-  const doneCount = steps.filter((s) => s.done).length
-  const allDone = doneCount === steps.length
+  const nextSteps = steps.filter((step) => !step.done).slice(0, 2)
 
   function dismiss() {
     localStorage.setItem(DISMISS_KEY, "1")
     setDismissed(true)
   }
 
-  if (allDone) {
-    return (
-      <div className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">
-        <span>✓ Всё настроено — finplan готов к работе.</span>
-        <button onClick={dismiss} title="Скрыть" className="text-emerald-700 hover:text-emerald-900">×</button>
-      </div>
-    )
-  }
+  if (!nextSteps.length) return null
 
   return (
-    <Card className="border-primary/30">
+    <Card className="border-primary/20 bg-card">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-base">С чего начать · {doneCount} из {steps.length} готово</CardTitle>
-          <button onClick={dismiss} title="Скрыть чеклист"
-            className="shrink-0 text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Пропустить
+          <div>
+            <CardTitle className="text-base">Сделать прогноз точнее</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Первый расчёт уже работает. Вот {nextSteps.length === 1 ? "следующий шаг" : "два самых полезных уточнения"}.
+            </p>
+          </div>
+          <button
+            onClick={dismiss}
+            title="Скрыть рекомендации"
+            aria-label="Скрыть рекомендации по уточнению прогноза"
+            className="touch-target grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-4" />
           </button>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Нажмите шаг — finplan подсветит нужное поле и подскажет, что и зачем заполнить.
-        </p>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <button
-          onClick={() => startCoach(0)}
-          className="mb-1 inline-flex w-fit items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          Пройти настройку с подсказками →
-        </button>
-        {steps.map((s) => (
+      <CardContent className="grid gap-2 md:grid-cols-2">
+        {nextSteps.map((step) => (
           <button
-            key={s.label}
-            onClick={() => startCoach(s.coachIndex)}
-            className="flex items-center gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+            key={step.label}
+            onClick={() => startCoach(step.coachIndex)}
+            className="group flex min-h-20 items-center gap-3 rounded-xl bg-muted/55 px-4 py-3 text-left transition-colors hover:bg-muted"
           >
-            <span className={s.done
-              ? "flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs text-white"
-              : "flex h-5 w-5 items-center justify-center rounded-full border text-xs text-muted-foreground"}>
-              {s.done ? "✓" : ""}
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-background text-primary ring-1 ring-foreground/10">
+              <Check className="size-4" />
             </span>
-            <span className={s.done ? "text-muted-foreground line-through" : "font-medium"}>{s.label}</span>
-            <span className="ml-auto text-muted-foreground">{s.done ? "повторить" : "показать →"}</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{step.label}</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{step.detail}</span>
+            </span>
+            <ArrowRight className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
           </button>
         ))}
       </CardContent>

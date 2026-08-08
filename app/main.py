@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
+from starlette.middleware.gzip import GZipMiddleware
 
 from .api import router as api_router
 from .db import init_db, make_engine
@@ -33,6 +34,7 @@ def create_app(
     image_dir_path.mkdir(parents=True, exist_ok=True)
 
     app = FastAPI(title="finplan")
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
     engine = make_engine(database_url)
     init_db(engine, seed=seed)
     app.state.SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)

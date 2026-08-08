@@ -2,7 +2,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, create_engine, select
+from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -83,7 +83,8 @@ class Wish(Base):
     priority: Mapped[str] = mapped_column(String(10), default="medium")  # high | medium | low
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     category: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    status: Mapped[str] = mapped_column(String(10), default="active")  # active | bought | dropped
+    status: Mapped[str] = mapped_column(String(10), default="active")  # active | completed | bought | dropped
+    completed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     image_source: Mapped[str | None] = mapped_column(String(40), nullable=True)  # manual | upload | codex
@@ -150,6 +151,8 @@ class Service(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    preset_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    preset_version: Mapped[int | None] = mapped_column(nullable=True)
 
 
 class ServiceCost(Base):
@@ -188,6 +191,106 @@ class ServiceTariffUsage(Base):
     units_per_client_month: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
 
 
+class TrendWatcherConfig(Base):
+    """Editable provider/pricing assumptions for a versioned TrendWatcher preset."""
+    __tablename__ = "trendwatcher_config"
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id"), primary_key=True)
+    active_scenario: Mapped[str] = mapped_column(String(12), default="base")
+    instagram_source: Mapped[str] = mapped_column(String(20), default="scrapecreators")
+    provider_allowance_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("10")
+    )
+    scrapecreators_price_per_1000: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("1.88")
+    )
+    scrapecreators_pack_price_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("47")
+    )
+    scrapecreators_pack_credits: Mapped[int] = mapped_column(default=25_000)
+    scrapecreators_credit_balance: Mapped[int] = mapped_column(default=0)
+    apify_instagram_price_per_1000: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("2.60")
+    )
+    apify_actor_start_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), default=Decimal("0.001")
+    )
+    llm_provider: Mapped[str] = mapped_column(
+        String(80), default="openrouter/google-gemini-2.5-flash"
+    )
+    llm_input_usd_per_million: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), default=Decimal("0.30")
+    )
+    llm_output_usd_per_million: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), default=Decimal("2.50")
+    )
+    llm_retry_overhead_pct: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), default=Decimal("0")
+    )
+    llm_platform_fee_pct: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), default=Decimal("0")
+    )
+    payment_fee_pct: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), default=Decimal("0")
+    )
+    payment_fee_fixed_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("0")
+    )
+    monthly_churn_pct: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), default=Decimal("0")
+    )
+    cac_per_client_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("0")
+    )
+    youtube_daily_general_units: Mapped[int] = mapped_column(default=10_000)
+    youtube_daily_search_calls: Mapped[int] = mapped_column(default=100)
+
+
+class TrendWatcherScenario(Base):
+    """Per-client monthly operational drivers for low/base/stress scenarios."""
+    __tablename__ = "trendwatcher_scenarios"
+    __table_args__ = (UniqueConstraint("service_id", "key", name="uq_tw_scenario_service_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id"), index=True)
+    key: Mapped[str] = mapped_column(String(12))
+    label: Mapped[str] = mapped_column(String(40))
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+    instagram_accounts: Mapped[int] = mapped_column(default=0)
+    instagram_refreshes_per_month: Mapped[int] = mapped_column(default=0)
+    instagram_credits_per_refresh: Mapped[int] = mapped_column(default=2)
+    instagram_results_per_refresh: Mapped[int] = mapped_column(default=13)
+    manual_instagram_full_collections: Mapped[int] = mapped_column(default=0)
+    instagram_radar_runs: Mapped[int] = mapped_column(default=0)
+    instagram_credits_per_radar_run: Mapped[int] = mapped_column(default=15)
+    instagram_transcripts: Mapped[int] = mapped_column(default=0)
+    instagram_published_videos: Mapped[int] = mapped_column(default=0)
+
+    tiktok_accounts: Mapped[int] = mapped_column(default=0)
+    tiktok_refreshes_per_month: Mapped[int] = mapped_column(default=0)
+    tiktok_credits_per_refresh: Mapped[int] = mapped_column(default=3)
+    manual_tiktok_full_collections: Mapped[int] = mapped_column(default=0)
+    tiktok_discovery_runs: Mapped[int] = mapped_column(default=0)
+    tiktok_credits_per_discovery_run: Mapped[int] = mapped_column(default=39)
+    tiktok_transcripts: Mapped[int] = mapped_column(default=0)
+    tiktok_published_videos: Mapped[int] = mapped_column(default=0)
+
+    youtube_channels: Mapped[int] = mapped_column(default=0)
+    youtube_refreshes_per_month: Mapped[int] = mapped_column(default=0)
+    manual_youtube_full_collections: Mapped[int] = mapped_column(default=0)
+    youtube_radar_queries: Mapped[int] = mapped_column(default=0)
+    youtube_published_videos: Mapped[int] = mapped_column(default=0)
+
+    outcome_checks_per_video: Mapped[int] = mapped_column(default=4)
+    llm_calls: Mapped[int] = mapped_column(default=0)
+    llm_input_tokens_per_call: Mapped[int] = mapped_column(default=0)
+    llm_output_tokens_per_call: Mapped[int] = mapped_column(default=0)
+    llm_annotated_videos: Mapped[int] = mapped_column(default=0)
+    llm_similarity_videos: Mapped[int] = mapped_column(default=0)
+    llm_profile_rebuilds: Mapped[int] = mapped_column(default=0)
+    llm_idea_candidates: Mapped[int] = mapped_column(default=0)
+    llm_manual_calls: Mapped[int] = mapped_column(default=0)
+
+
 def make_engine(url: str):
     if url.startswith("sqlite"):
         connect_args = {"check_same_thread": False}
@@ -222,8 +325,33 @@ def _ensure_columns(engine):
             "category": "VARCHAR(80)",
             "paid_amount": "NUMERIC(18, 2) DEFAULT 0 NOT NULL",
         },
-        "wishes": {"image_url": "VARCHAR(500)", "image_source": "VARCHAR(40)", "card_size": "VARCHAR(12)", "sort_order": "INTEGER DEFAULT 0"},
+        "wishes": {
+            "image_url": "VARCHAR(500)",
+            "image_source": "VARCHAR(40)",
+            "card_size": "VARCHAR(12)",
+            "sort_order": "INTEGER DEFAULT 0",
+            "completed_at": "DATE",
+        },
         "settings": {"display_name": "VARCHAR(120)"},
+        "services": {"preset_key": "VARCHAR(40)", "preset_version": "INTEGER"},
+        "trendwatcher_config": {
+            "scrapecreators_pack_price_usd": "NUMERIC(18, 4) DEFAULT 47 NOT NULL",
+            "scrapecreators_pack_credits": "INTEGER DEFAULT 25000 NOT NULL",
+            "scrapecreators_credit_balance": "INTEGER DEFAULT 0 NOT NULL",
+            "llm_retry_overhead_pct": "NUMERIC(8, 4) DEFAULT 0 NOT NULL",
+            "llm_platform_fee_pct": "NUMERIC(8, 4) DEFAULT 0 NOT NULL",
+            "payment_fee_pct": "NUMERIC(8, 4) DEFAULT 0 NOT NULL",
+            "payment_fee_fixed_usd": "NUMERIC(18, 4) DEFAULT 0 NOT NULL",
+            "monthly_churn_pct": "NUMERIC(8, 4) DEFAULT 0 NOT NULL",
+            "cac_per_client_usd": "NUMERIC(18, 4) DEFAULT 0 NOT NULL",
+        },
+        "trendwatcher_scenarios": {
+            "llm_annotated_videos": "INTEGER DEFAULT 0 NOT NULL",
+            "llm_similarity_videos": "INTEGER DEFAULT 0 NOT NULL",
+            "llm_profile_rebuilds": "INTEGER DEFAULT 0 NOT NULL",
+            "llm_idea_candidates": "INTEGER DEFAULT 0 NOT NULL",
+            "llm_manual_calls": "INTEGER DEFAULT 0 NOT NULL",
+        },
     }
     insp = inspect(engine)
     is_pg = engine.dialect.name == "postgresql"
@@ -264,6 +392,8 @@ def init_db(engine, seed: bool = True):
     Base.metadata.create_all(engine)
     _ensure_columns(engine)
     with sessionmaker(bind=engine)() as db:
+        from .service_presets import upgrade_legacy_trendwatcher_presets
+        upgrade_legacy_trendwatcher_presets(db)
         if db.scalar(select(SettingsRow).limit(1)) is None:
             db.add(SettingsRow(id=1))
         if db.scalar(select(CourseConfigRow).limit(1)) is None:

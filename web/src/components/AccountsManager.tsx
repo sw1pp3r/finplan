@@ -10,8 +10,15 @@ import {
 } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 
-export function AccountsManager({ onChanged }: { onChanged?: () => void }) {
+export function AccountsManager({
+  onChanged,
+  defaultOpen = true,
+}: {
+  onChanged?: () => void
+  defaultOpen?: boolean
+}) {
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [open, setOpen] = useState(defaultOpen)
   const [preset, setPreset] = useState("")
   const [customName, setCustomName] = useState("")
   const [currency, setCurrency] = useState("USD")
@@ -42,14 +49,29 @@ export function AccountsManager({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <Card id="accounts" data-coach="accounts" className="scroll-mt-20">
-      <CardHeader>
-        <CardTitle className="text-base">Счета</CardTitle>
-        <p className="text-sm text-muted-foreground">Что входит в баланс. Архивные счёта исчезают из снимка, но история остаётся.</p>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <div>
+          <CardTitle className="text-base">Управление счетами</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {accounts.length
+              ? `${accounts.length} активных · добавление и архив`
+              : "Добавь первый счёт — он появится в записи баланса"}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          className="min-h-11 shrink-0 sm:min-h-9"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? "Скрыть" : "Управлять"}
+        </Button>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      {open && <CardContent className="flex flex-col gap-4">
         <form onSubmit={add} className="flex flex-wrap items-center gap-2">
           <Select value={preset} onValueChange={pickPreset}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="Выбери счёт…" /></SelectTrigger>
+            <SelectTrigger className="min-h-11 w-48 sm:min-h-9" aria-label="Шаблон счёта"><SelectValue placeholder="Выбери счёт…" /></SelectTrigger>
             <SelectContent>
               {ACCOUNT_PRESETS.map((g) => (
                 <SelectGroup key={g.group}>
@@ -65,16 +87,17 @@ export function AccountsManager({ onChanged }: { onChanged?: () => void }) {
           </Select>
           {preset === "custom" && (
             <Input value={customName} onChange={(e) => setCustomName(e.target.value)}
-              placeholder="Название счёта" className="w-44" autoFocus />
+              placeholder="Название счёта" aria-label="Название нового счёта" className="min-h-11 w-44 sm:min-h-9" autoFocus />
           )}
-          <CurrencySelect value={currency} onChange={setCurrency} />
+          <CurrencySelect value={currency} onChange={setCurrency} ariaLabel="Валюта нового счёта" />
           <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="min-h-11 w-28 sm:min-h-9" aria-label="Тип нового счёта"><SelectValue /></SelectTrigger>
             <SelectContent>
               {ACCOUNT_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button type="submit" variant="secondary" disabled={!preset || (preset === "custom" && !customName.trim())}>
+          <Button type="submit" variant="secondary" className="min-h-11 sm:min-h-9"
+            disabled={!preset || (preset === "custom" && !customName.trim())}>
             Добавить счёт
           </Button>
         </form>
@@ -87,7 +110,7 @@ export function AccountsManager({ onChanged }: { onChanged?: () => void }) {
                   <TableCell>{a.currency}</TableCell>
                   <TableCell className="text-muted-foreground">{a.type}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="ghost" className="text-muted-foreground"
+                    <Button size="sm" variant="ghost" className="min-h-11 text-muted-foreground sm:min-h-8"
                       onClick={() => void archive(a.id)}>архив</Button>
                   </TableCell>
                 </TableRow>
@@ -95,7 +118,7 @@ export function AccountsManager({ onChanged }: { onChanged?: () => void }) {
             </TableBody>
           </Table>
         )}
-      </CardContent>
+      </CardContent>}
     </Card>
   )
 }

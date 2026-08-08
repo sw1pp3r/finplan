@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import httpx
+import pytest
 
 from app import images
 
@@ -43,6 +44,133 @@ def test_default_fetch_happy_path():
         "http://example.com/a.jpg",
         fetch=lambda u: images._default_bytes_fetch(u, client=c),
     ) == b"IMGDATA"
+
+
+def test_default_fetch_identifies_finplan_to_image_hosts():
+    """Wikimedia и часть CDN режут безымянные backend-запросы через 403."""
+    seen = {}
+
+    def handler(request):
+        seen["user_agent"] = request.headers.get("user-agent")
+        return httpx.Response(200, content=b"IMGDATA")
+
+    c = _mock_client(handler)
+    assert images._default_bytes_fetch("https://example.com/a.jpg", client=c) == b"IMGDATA"
+    assert seen["user_agent"].startswith("finplan/")
+
+
+def test_openverse_search_simplifies_common_product_model():
+    seen = {}
+
+    def search(query):
+        seen["query"] = query
+        return []
+
+    assert images.find_openverse_images("MacBook Pro M4 Max", "Техника", None, search=search) == []
+    assert seen["query"] == "macbook"
+
+
+@pytest.mark.parametrize(
+    ("name", "expected_query"),
+    [
+        ("Новая кровать", "bedroom bed"),
+        ("Сходить на концерт", "live concert"),
+        ("Курс английского", "English language learning"),
+    ],
+)
+def test_openverse_search_translates_common_russian_wishes(name, expected_query):
+    seen = {}
+
+    def search(query):
+        seen["query"] = query
+        return []
+
+    assert images.find_openverse_images(name, None, None, search=search) == []
+    assert seen["query"] == expected_query
+
+
+def test_openverse_search_translates_unknown_russian_purchase():
+    seen = {"queries": []}
+
+    def search(query):
+        seen["queries"].append(query)
+        return []
+
+    def translate(text):
+        seen["translation_input"] = text
+        return "air purifier"
+
+    assert images.find_openverse_images(
+        "Очистители воздуха",
+        "Вещи",
+        None,
+        search=search,
+        translate=translate,
+    ) == []
+    assert seen == {
+        "translation_input": "Очистители воздуха",
+        "queries": ["air purifier", "consumer products"],
+    }
+
+
+def test_openverse_search_never_sends_cyrillic_when_translation_fails():
+    seen = []
+
+    assert images.find_openverse_images(
+        "Совершенно неизвестная покупка",
+        None,
+        None,
+        search=lambda query: seen.append(query) or [],
+        translate=lambda _text: None,
+    ) == []
+    assert seen == []
+
+
+def test_openverse_search_uses_english_category_when_translation_fails():
+    seen = []
+
+    assert images.find_openverse_images(
+        "Совершенно неизвестная покупка",
+        "Здоровье",
+        None,
+        search=lambda query: seen.append(query) or [],
+        translate=lambda _text: None,
+    ) == []
+    assert seen == ["healthcare"]
+
+
+def test_translation_payload_prefers_quality_match_and_rejects_web_ui_noise():
+    payload = {
+        "responseData": {
+            "translatedText": "Log in to post comments Trip to Japan",
+            "match": 0.99,
+        },
+        "matches": [
+            {
+                "translation": "Log in to post comments Trip to Japan",
+                "quality": "0",
+                "match": 0.99,
+            },
+            {
+                "translation": "Trip to Japan",
+                "quality": "74",
+                "match": 0.96,
+            },
+        ],
+    }
+
+    assert images._translation_from_payload(payload) == "Trip to Japan"
+
+
+def test_translation_payload_rejects_low_confidence_match():
+    payload = {
+        "responseData": {"translatedText": "Random product", "match": 0.2},
+        "matches": [
+            {"translation": "Unrelated appliance", "quality": "74", "match": 0.1},
+        ],
+    }
+
+    assert images._translation_from_payload(payload) is None
 
 
 def test_fetch_bytes_returns_data():

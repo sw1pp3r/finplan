@@ -17,11 +17,13 @@ export function CurrencySelect({
   onChange,
   className,
   known,
+  ariaLabel = "Валюта",
 }: {
   value: string
   onChange: (v: string) => void
   className?: string
   known?: readonly string[]
+  ariaLabel?: string
 }) {
   const auto = useKnownCurrencies()
   const list = known ?? auto
@@ -42,7 +44,7 @@ export function CurrencySelect({
   return (
     <div className="flex items-center gap-2">
       <Select value={showInput ? CUSTOM : value} onValueChange={onSelect}>
-        <SelectTrigger className={className ?? "w-24"}>
+        <SelectTrigger className={className ?? "w-24"} aria-label={ariaLabel}>
           <SelectValue placeholder="Валюта" />
         </SelectTrigger>
         <SelectContent>
@@ -57,7 +59,8 @@ export function CurrencySelect({
           value={value}
           onChange={(e) => onChange(e.target.value.toUpperCase())}
           placeholder="EUR"
-          className="w-20"
+          aria-label={`Своя валюта: ${ariaLabel}`}
+          className="h-11 w-20 sm:h-8"
           maxLength={12}
           autoFocus
         />

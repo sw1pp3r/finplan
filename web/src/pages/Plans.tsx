@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Dialog as DialogPrimitive } from "radix-ui"
 import { api, type Expenses, type Obligation, type Ref } from "@/lib/api"
 import { useCoach, COACH_STEPS } from "@/lib/coach"
 import { refreshCurrencies } from "@/lib/currencies"
@@ -13,6 +14,7 @@ import { RefCombo } from "@/components/RefCombo"
 import { SectionHelp } from "@/components/SectionHelp"
 import { InfoHint } from "@/components/InfoHint"
 import { Input } from "@/components/ui/input"
+import { useReturnFocus } from "@/components/ui/use-return-focus"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -30,7 +32,7 @@ const REC_SHORT: Record<string, string> = {
   once: "разовый", weekly: "еженедельно", monthly: "ежемесячно", yearly: "ежегодно",
 }
 
-type Filter = "all" | "recur" | "once"
+type Filter = "active" | "recur" | "once" | "history"
 
 // ── иконки (из макета) ───────────────────────────────────────────────────────
 const Repeat = () => (
@@ -68,10 +70,13 @@ const DotsIcon = () => (
 const GRID =
   "grid grid-cols-[40px_minmax(0,1fr)_minmax(120px,158px)] items-center gap-3.5 " +
   "lg:grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px]"
+const READ_GRID =
+  "grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-2 " +
+  "lg:grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px] lg:gap-y-0"
 const ACTION_RAIL =
   "relative mt-3 flex flex-wrap items-center justify-end gap-1 border-t border-line-2 pt-3 opacity-100 " +
   "lg:pointer-events-none lg:absolute lg:right-3.5 lg:top-1/2 lg:mt-0 lg:-translate-y-1/2 " +
-  "lg:border-t-0 lg:bg-gradient-to-l lg:from-card-2 lg:from-[28%] lg:to-transparent lg:pl-9 lg:pt-0 " +
+  "lg:border-t-0 lg:bg-card-2 lg:pl-3 lg:pt-0 " +
   "lg:opacity-0 lg:transition-opacity lg:group-hover:pointer-events-auto lg:group-hover:opacity-100"
 
 // ── модуль «Ежемесячные расходы» + точка безубыточности ──────────────────────
@@ -85,15 +90,13 @@ function Breakeven({ data }: { data: Expenses }) {
   const mx = Math.max(1, ...rows.map((r) => r.v))
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
-      {/* breakeven — главный ответ, поэтому слева */}
-      <Card className="relative flex flex-col gap-0 overflow-hidden px-6 py-[22px]">
-        <span aria-hidden className="absolute inset-y-[18px] left-0 w-[3px] rounded-[3px] bg-pos" />
+    <Card className="grid gap-0 overflow-hidden p-0 lg:grid-cols-[1fr_1.35fr]">
+      <div className="flex flex-col px-5 py-5 md:px-6">
         <span className="flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full bg-pos-soft py-1 pl-2 pr-[11px]">
           <i className="h-[7px] w-[7px] shrink-0 rounded-full bg-pos" />
           <span className="text-xs font-semibold text-pos">Точка безубыточности</span>
         </span>
-        <span className="mt-4 text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+        <span className="mt-4 text-sm text-ink-2">
           Сколько нужно зарабатывать
         </span>
         <div className="tnum mt-[5px] text-[34px] font-semibold leading-[1.05] tracking-[-0.035em]">
@@ -119,17 +122,14 @@ function Breakeven({ data }: { data: Expenses }) {
             Разовые предстоящие: {money(data.one_off_total)} {cur} ({data.one_off_count}) — не входят в месячную сумму.
           </p>
         )}
-      </Card>
+      </div>
 
       {/* breakdown */}
-      <Card className="gap-0 px-6 py-[22px]">
+      <div className="border-t border-line-2 px-5 py-5 md:px-6 lg:border-l lg:border-t-0">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <span className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+          <span className="flex items-center gap-1.5 text-sm font-semibold">
             Ежемесячные расходы
             <InfoHint>Сколько нужно зарабатывать в месяц, чтобы деньги не таяли: регулярные платежи + повседневные траты.</InfoHint>
-          </span>
-          <span className="tnum text-sm font-semibold text-ink-2">
-            всего <b className="text-[15px] font-semibold text-foreground">{money(total)} {cur}</b> / мес
           </span>
         </div>
         {rows.length ? (
@@ -151,8 +151,8 @@ function Breakeven({ data }: { data: Expenses }) {
         ) : (
           <p className="text-sm text-muted-foreground">Добавь повторяющиеся расходы, чтобы увидеть месячную картину.</p>
         )}
-      </Card>
-    </section>
+      </div>
+    </Card>
   )
 }
 
@@ -187,20 +187,25 @@ function PaymentDialog({ obligation, onClose, onPaid }: {
   const [partial, setPartial] = useState("")
   const partialAmount = Number(partial)
   const partialValid = partial !== "" && partialAmount > 0 && partialAmount <= remaining
+  const close = useReturnFocus(onClose)
 
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/35 p-4" onMouseDown={(e) => {
-      if (e.target === e.currentTarget) onClose()
-    }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="payment-title"
-        className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl">
+    <DialogPrimitive.Root open onOpenChange={(open) => { if (!open) close() }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[60] bg-black/35" />
+        <DialogPrimitive.Content asChild aria-describedby={undefined}>
+          <section className="fixed left-1/2 top-1/2 z-[61] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="payment-title" className="text-lg font-semibold tracking-tight">Оплата расхода</h2>
+            <DialogPrimitive.Title asChild>
+              <h2 className="text-lg font-semibold tracking-tight">Оплата расхода</h2>
+            </DialogPrimitive.Title>
             <p className="mt-1 text-sm text-ink-2">{obligation.name}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Закрыть диалог"
-            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-card-2 hover:text-foreground">×</button>
+          <DialogPrimitive.Close asChild>
+            <button type="button" aria-label="Закрыть диалог"
+              className="touch-target grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-card-2 hover:text-foreground">×</button>
+          </DialogPrimitive.Close>
         </div>
 
         <div className="mt-5 rounded-lg bg-card-2 px-4 py-3">
@@ -213,7 +218,7 @@ function PaymentDialog({ obligation, onClose, onPaid }: {
           )}
         </div>
 
-        <Button type="button" className="mt-4 w-full" onClick={() => void onPaid(remaining)}>
+        <Button type="button" className="mt-4 min-h-11 w-full" onClick={() => void onPaid(remaining)}>
           <CheckIcon />Оплатить полностью
         </Button>
 
@@ -224,13 +229,15 @@ function PaymentDialog({ obligation, onClose, onPaid }: {
           <Input type="number" min="0.01" max={remaining} step="any" value={partial}
             onChange={(e) => setPartial(e.target.value)} aria-label="Сумма частичной оплаты"
             placeholder="Сумма" className="tnum" autoFocus />
-          <Button type="button" variant="outline" disabled={!partialValid}
-            onClick={() => void onPaid(partialAmount)} className="shrink-0">
+          <Button type="button" variant="outline" className="min-h-11 shrink-0" disabled={!partialValid}
+            onClick={() => void onPaid(partialAmount)}>
             Оплатить частично
           </Button>
         </div>
       </section>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   )
 }
 
@@ -238,7 +245,8 @@ export default function Plans() {
   const [obligations, setObligations] = useState<Obligation[]>([])
   const [expenses, setExpenses] = useState<Expenses | null>(null)
   const [categories, setCategories] = useState<Ref[]>([])
-  const [filter, setFilter] = useState<Filter>("all")
+  const [filter, setFilter] = useState<Filter>("active")
+  const [showAllActive, setShowAllActive] = useState(false)
   // форма: adding (новый) | editingId (правка существующего) | null (закрыта)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -331,14 +339,22 @@ export default function Plans() {
 
   const today = todayIso()
 
-  const { recurRows, onceRows } = useMemo(() => {
-    const visible = obligations.filter((o) =>
-      filter === "all" ? true : filter === "recur" ? o.recurrence !== "once" : o.recurrence === "once")
-    return {
-      recurRows: visible.filter((o) => o.recurrence !== "once"),
-      onceRows: visible.filter((o) => o.recurrence === "once"),
-    }
-  }, [obligations, filter])
+  const filteredRows = useMemo(() => {
+    return obligations.filter((o) => {
+      if (filter === "history") return o.status !== "planned"
+      if (o.status !== "planned") return false
+      if (filter === "recur") return o.recurrence !== "once"
+      if (filter === "once") return o.recurrence === "once"
+      return true
+    }).sort((a, b) => {
+      const aDate = a.status === "planned" ? nextOccurrence(a.due_date, a.recurrence, today) : a.due_date
+      const bDate = b.status === "planned" ? nextOccurrence(b.due_date, b.recurrence, today) : b.due_date
+      return aDate.localeCompare(bDate)
+    })
+  }, [obligations, filter, today])
+  const displayedActive = filter === "active" && !showAllActive ? filteredRows.slice(0, 5) : filteredRows
+  const recurRows = filteredRows.filter((o) => o.recurrence !== "once")
+  const onceRows = filteredRows.filter((o) => o.recurrence === "once")
 
   // ── строка чтения ──────────────────────────────────────────────────────────
   const ReadRow = (o: Obligation) => {
@@ -350,12 +366,12 @@ export default function Plans() {
       <div key={o.id}
         className={cn("group relative mx-1 rounded-[10px] px-4 py-3 transition-colors hover:bg-card-2",
           o.status === "cancelled" && "opacity-45")}>
-        <div className={GRID}>
+        <div className={READ_GRID}>
           <span className={cn("grid h-10 w-10 place-items-center rounded-[10px] border",
             recur ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2")}>
             <DotsIcon />
           </span>
-          <div className="min-w-0">
+          <div className="col-span-2 min-w-0 lg:col-span-1">
             <div className="flex items-center gap-2 text-[14.5px] font-medium tracking-[-0.01em]">
               <span className="truncate">{o.name}</span>
               {recur ? (
@@ -368,18 +384,18 @@ export default function Plans() {
             </div>
             {o.category && <div className="mt-[3px] text-[12.5px] text-ink-3">{o.category}</div>}
           </div>
-          <span className="whitespace-nowrap text-[13px] text-ink-2">{REC_LABEL[o.recurrence]}</span>
-          <span className="tnum whitespace-nowrap text-[13px] text-ink-2">{ddmm(occ)}</span>
-          <span className="block min-w-0 text-left">
+          <span className="hidden whitespace-nowrap text-[13px] text-ink-2 lg:block">{REC_LABEL[o.recurrence]}</span>
+          <span className="tnum col-start-2 row-start-2 whitespace-nowrap text-[13px] text-ink-2 lg:col-start-auto lg:row-start-auto">{ddmm(occ)}</span>
+          <span className="col-start-3 row-start-2 block min-w-0 text-right lg:col-start-auto lg:row-start-auto lg:text-left">
             <span className="tnum block whitespace-nowrap text-[15.5px] font-semibold text-neg">−{money(remainingAmount)} {o.currency}</span>
             {paidAmount > 0 && <span className="block whitespace-normal break-words text-[11px] leading-4 text-ink-3">из {money(o.amount)} · оплачено {money(paidAmount)}</span>}
             {o.currency !== base && <BaseAside cur={base} value={conv(remainingAmount, o.currency)} sign="−" />}
           </span>
-          <span className="flex min-w-0 justify-start"><StatusChip obligation={o} /></span>
+          <span className="col-span-2 col-start-2 row-start-3 flex min-w-0 justify-end lg:col-span-1 lg:col-start-auto lg:row-start-auto lg:justify-start"><StatusChip obligation={o} /></span>
         </div>
         <div className={ACTION_RAIL} aria-label="Действия с расходом">
           <button type="button" aria-label="Редактировать расход" title="Редактировать" onClick={() => startEdit(o)}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+            className="grid h-11 w-11 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground lg:h-8 lg:w-8">
             <EditIcon />
           </button>
           {o.status === "planned" ? (
@@ -388,22 +404,22 @@ export default function Plans() {
                 aria-label={recur ? "Отметить расход оплаченным за период" : "Отметить расход оплаченным"}
                 title={recur ? "оплатить за этот период → перейти к следующему" : undefined}
                 onClick={() => recur ? setObStatus(o.id, "paid") : setPaymentTarget(o)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-[11px] text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos">
+                className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos lg:h-8 lg:px-[11px]">
                 <CheckIcon />Оплачено
               </button>
               <button type="button" aria-label="Отменить расход" title="Отменить" onClick={() => setObStatus(o.id, "cancelled")}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+                className="grid h-11 w-11 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground lg:h-8 lg:w-8">
                 ✕
               </button>
             </>
           ) : (
             <button type="button" aria-label="Вернуть расход в план" title="Вернуть в план" onClick={() => setObStatus(o.id, "planned")}
-              className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-[11px] text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+              className="inline-flex h-11 items-center rounded-lg border border-border bg-card px-3 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground lg:h-8 lg:px-[11px]">
               Вернуть
             </button>
           )}
           <button type="button" aria-label="Удалить расход" title="Удалить" onClick={() => api.delete(`/obligations/${o.id}`).then(load)}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg">
+            className="grid h-11 w-11 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg lg:h-8 lg:w-8">
             <TrashIcon />
           </button>
         </div>
@@ -426,20 +442,21 @@ export default function Plans() {
         recurForm ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2")}>
         {editingId === null ? <PlusIcon className="h-[17px] w-[17px]" /> : <DotsIcon />}
       </span>
-      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Статья расхода" aria-label="Статья" required className="h-[38px]" />
+      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Статья расхода" aria-label="Статья" required className="min-h-11 sm:min-h-[38px]" />
       <div className="flex min-w-0 items-center gap-1.5">
-        <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" min="0.01" placeholder="0" aria-label="Сумма" required className="tnum h-[38px] min-w-0 font-medium" />
-        <CurrencySelect value={obCurrency} onChange={setObCurrency} className="h-[38px] w-[72px]" />
+        <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" min="0.01" placeholder="0" aria-label="Сумма" required className="tnum min-h-11 min-w-0 font-medium sm:min-h-[38px]" />
+        <CurrencySelect value={obCurrency} onChange={setObCurrency}
+          ariaLabel="Валюта расхода" className="min-h-11 w-[72px] sm:min-h-[38px]" />
       </div>
       <Select value={recurrence} onValueChange={(v) => { setRecurrence(v); if (v === "once") setRecurrenceEnd(null) }}>
-        <SelectTrigger className="h-[38px]" aria-label="Периодичность"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="min-h-11 sm:min-h-[38px]" aria-label="Периодичность"><SelectValue /></SelectTrigger>
         <SelectContent>
           {REC_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
         </SelectContent>
       </Select>
-      <Input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" aria-label="Срок" required className="h-[38px]" />
+      <Input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" aria-label="Срок" required className="min-h-11 sm:min-h-[38px]" />
       <Select value={status} onValueChange={setStatus}>
-        <SelectTrigger className="h-[38px]" aria-label="Статус"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="min-h-11 sm:min-h-[38px]" aria-label="Статус"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="planned">Запланировано</SelectItem>
           <SelectItem value="paid">Оплачено</SelectItem>
@@ -450,16 +467,19 @@ export default function Plans() {
         <RefCombo options={categories} value={category} onChange={setCategory} placeholder="Категория" />
         {recurForm && (
           <Input value={recurrenceEnd ?? ""} onChange={(e) => setRecurrenceEnd(e.target.value || null)}
-            type="date" className="h-[38px] w-40" title="Повтор до (необязательно)" placeholder="до" />
+            type="date" className="min-h-11 w-40 sm:min-h-[38px]" title="Повтор до (необязательно)" placeholder="до" />
         )}
         <div className="flex-1" />
-        <Button type="button" variant="ghost" onClick={resetForm}>Отмена</Button>
+        <Button type="button" variant="ghost" className="min-h-11 sm:min-h-8" onClick={resetForm}>Отмена</Button>
         {editingId !== null && (
-          <Button type="button" variant="outline" onClick={() => api.delete(`/obligations/${editingId}`).then(() => { resetForm(); void load() })}>
+          <Button type="button" variant="outline" className="min-h-11 sm:min-h-8"
+            onClick={() => api.delete(`/obligations/${editingId}`).then(() => { resetForm(); void load() })}>
             Удалить
           </Button>
         )}
-        <Button type="submit">{editingId !== null ? "Сохранить" : "Добавить расход"}</Button>
+        <Button type="submit" className="min-h-11 sm:min-h-8">
+          {editingId !== null ? "Сохранить" : "Добавить расход"}
+        </Button>
       </div>
     </form>
   )
@@ -473,24 +493,33 @@ export default function Plans() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-5">
-        <SectionHelp route="/plans" title="Расходы">
+      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
+        <SectionHelp route="/plans" title="Расходы" defaultOpen={false}>
           Регулярные и разовые платежи (аренда, подписки, налоги). Внизу видно, сколько нужно зарабатывать в месяц, чтобы не уходить в минус. Всё это вычитается из прогноза.
         </SectionHelp>
         {!adding && editingId === null && (
-          <Button onClick={startAdd} className="shrink-0"><PlusIcon className="h-4 w-4" />Добавить расход</Button>
+          <Button onClick={startAdd} className="min-h-11 shrink-0 sm:min-h-9">
+            <PlusIcon className="h-4 w-4" />Добавить расход
+          </Button>
         )}
       </div>
 
       {expenses && <Breakeven data={expenses} />}
 
       <Card className="gap-0 px-2 pb-3 pt-2">
-        <div className="flex items-center justify-between gap-3.5 px-4 pb-3 pt-3.5">
-          <h3 className="text-[15.5px] font-semibold tracking-[-0.02em]">Обязательства</h3>
-          <div className="flex gap-px rounded-lg border border-border bg-card-2 p-[3px]">
-            {([["all", "Все"], ["recur", "Регулярные"], ["once", "Разовые"]] as const).map(([f, label]) => (
-              <button key={f} type="button" onClick={() => setFilter(f)}
-                className={cn("whitespace-nowrap rounded-md px-3 py-[5px] text-[12.5px] font-medium transition-colors",
+        <div className="flex flex-col items-stretch gap-3 px-4 pb-3 pt-3.5 min-[430px]:flex-row min-[430px]:items-center min-[430px]:justify-between">
+          <h2 className="text-[15.5px] font-semibold tracking-[-0.02em]">Обязательства</h2>
+          <div role="group" aria-label="Фильтр расходов"
+            className="grid w-full grid-cols-2 gap-px rounded-lg border border-border bg-card-2 p-[3px] min-[430px]:flex min-[430px]:w-auto">
+            {([
+              ["active", "Активные"],
+              ["recur", "Регулярные"],
+              ["once", "Разовые"],
+              ["history", "История"],
+            ] as const).map(([f, label]) => (
+              <button key={f} type="button" onClick={() => { setFilter(f); setShowAllActive(false) }}
+                aria-pressed={filter === f}
+                className={cn("min-h-11 min-w-0 flex-1 whitespace-nowrap rounded-md px-2 py-[5px] text-[12.5px] font-medium transition-colors min-[430px]:min-h-8 min-[430px]:flex-none min-[430px]:px-3",
                   filter === f ? "bg-card text-foreground shadow-sm" : "text-ink-3 hover:text-ink-2")}>
                 {label}
               </button>
@@ -500,19 +529,34 @@ export default function Plans() {
 
         {(adding || editingId !== null) && FormRow}
 
-        {recurRows.length === 0 && onceRows.length === 0 && !adding && editingId === null && (
+        {filteredRows.length === 0 && !adding && editingId === null && (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-            Пока пусто — добавь первый расход.
+            {filter === "history" ? "История пока пуста." : "Пока пусто — добавь первый расход."}
           </p>
         )}
 
-        {recurRows.length > 0 && (
+        {filter === "active" && displayedActive.length > 0 && (
+          <>
+            <GroupLabel text="Ближайшие" n={filteredRows.length} />
+            {displayedActive.map((o) => (editingId === o.id ? null : ReadRow(o)))}
+            {filteredRows.length > displayedActive.length && (
+              <button
+                type="button"
+                className="mx-4 mt-2 min-h-11 rounded-lg border border-border px-4 text-sm font-medium text-ink-2 hover:bg-card-2"
+                onClick={() => setShowAllActive(true)}
+              >
+                Показать ещё {filteredRows.length - displayedActive.length}
+              </button>
+            )}
+          </>
+        )}
+        {filter !== "active" && recurRows.length > 0 && (
           <>
             <GroupLabel text="Регулярные" n={recurRows.length} />
             {recurRows.map((o) => (editingId === o.id ? null : ReadRow(o)))}
           </>
         )}
-        {onceRows.length > 0 && (
+        {filter !== "active" && onceRows.length > 0 && (
           <>
             <GroupLabel text="Разовые" n={onceRows.length} />
             {onceRows.map((o) => (editingId === o.id ? null : ReadRow(o)))}

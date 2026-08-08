@@ -1,6 +1,8 @@
 """REST API: ТЗ §7. JSON, Bearer-токен (если настроен)."""
+from copy import copy
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
@@ -10,6 +12,7 @@ from pydantic import BaseModel, Field, StringConstraints
 Amount = Annotated[float, Field(gt=0)]
 NonNegativeAmount = Annotated[float, Field(ge=0)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+Percentage = Annotated[float, Field(ge=0, le=100)]
 # Длины строк держим в паритете с колонками БД (SQLite не enforce-ит, Postgres рубит → 500).
 # Отдаём 422 на обоих бэкендах вместо StringDataRightTruncation (#13/#18/#19).
 Currency = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
@@ -30,7 +33,7 @@ from . import images
 from .db import (
     Account, Category, CourseConfigRow, CourseCost, CourseTariff, Direction, FxRate,
     InflowRow, ObligationRow, Service, ServiceCost, ServiceTariff, ServiceTariffUsage,
-    SnapshotRow, Wish,
+    SnapshotRow, TrendWatcherConfig, TrendWatcherScenario, Wish,
 )
 from .forecast import next_period
 from .service import (
@@ -54,13 +57,16 @@ router = APIRouter(prefix="/api")
 
 # ---------- deps ----------
 
+def _wants_demo(request: Request) -> bool:
+    return request.headers.get("X-Demo") == "1" or request.query_params.get("demo") == "1"
+
+
 def get_db(request: Request):
     state = request.app.state
     demo = getattr(state, "DemoSessionLocal", None)
     # Демо: заголовок X-Demo ИЛИ ?demo=1 → отдельная in-memory демо-БД (реальную не трогаем).
     # Квери-параметр — фолбэк для прокси/CDN, которые режут кастомные заголовки (напр. Railway).
-    want_demo = request.headers.get("X-Demo") == "1" or request.query_params.get("demo") == "1"
-    if demo is not None and want_demo:
+    if demo is not None and _wants_demo(request):
         db = demo()
     else:
         db = state.SessionLocal()
@@ -68,6 +74,14 @@ def get_db(request: Request):
         yield db
     finally:
         db.close()
+
+
+def _wish_image_storage(request: Request) -> tuple[str, str]:
+    """Файловый namespace + URL-prefix для той же real/demo tenant-зоны, что и get_db."""
+    state = request.app.state
+    if getattr(state, "DemoSessionLocal", None) is not None and _wants_demo(request):
+        return str(Path(state.image_dir) / "demo"), "/wish-images/demo"
+    return state.image_dir, "/wish-images"
 
 
 def require_token(request: Request):
@@ -111,12 +125,15 @@ ObStatus = Literal["planned", "paid", "cancelled"]
 Probability = Literal["confirmed", "likely", "possible"]
 InflowStatus = Literal["expected", "received", "lost"]
 WishPriority = Literal["high", "medium", "low"]
-WishStatus = Literal["active", "bought", "dropped"]
+WishStatus = Literal["active", "completed", "bought", "dropped"]
 CardSize = Literal["small", "square", "tall", "wide", "large", "auto"]
 CourseCostKind = Literal["monthly", "per_student"]
 ServiceCostKind = Literal["fixed", "per_client", "per_unit"]
 UnitLabel = Annotated[str, Field(max_length=40)]
 UnitSize = Annotated[int, Field(ge=1)]
+ScenarioKey = Literal["low", "base", "stress"]
+InstagramSource = Literal["scrapecreators", "apify"]
+PositiveInt = Annotated[int, Field(gt=0)]
 
 
 def _reject_nulls(data: dict, fields: set[str]):
@@ -329,8 +346,102 @@ class ServiceCostPatch(BaseModel):
     sort_order: int | None = None
 
 
+class TrendWatcherConfigPatch(BaseModel):
+    active_scenario: ScenarioKey | None = None
+    instagram_source: InstagramSource | None = None
+    provider_allowance_usd: NonNegativeAmount | None = None
+    scrapecreators_price_per_1000: Amount | None = None
+    scrapecreators_pack_price_usd: Amount | None = None
+    scrapecreators_pack_credits: PositiveInt | None = None
+    scrapecreators_credit_balance: NonNegativeInt | None = None
+    apify_instagram_price_per_1000: Amount | None = None
+    apify_actor_start_usd: NonNegativeAmount | None = None
+    llm_provider: Name80 | None = None
+    llm_input_usd_per_million: NonNegativeAmount | None = None
+    llm_output_usd_per_million: NonNegativeAmount | None = None
+    llm_retry_overhead_pct: Percentage | None = None
+    llm_platform_fee_pct: Percentage | None = None
+    payment_fee_pct: Percentage | None = None
+    payment_fee_fixed_usd: NonNegativeAmount | None = None
+    monthly_churn_pct: Percentage | None = None
+    cac_per_client_usd: NonNegativeAmount | None = None
+    youtube_daily_general_units: PositiveInt | None = None
+    youtube_daily_search_calls: PositiveInt | None = None
+
+
+class TrendWatcherScenarioPatch(BaseModel):
+    instagram_accounts: NonNegativeInt | None = None
+    instagram_refreshes_per_month: NonNegativeInt | None = None
+    instagram_credits_per_refresh: NonNegativeInt | None = None
+    instagram_results_per_refresh: NonNegativeInt | None = None
+    manual_instagram_full_collections: NonNegativeInt | None = None
+    instagram_radar_runs: NonNegativeInt | None = None
+    instagram_credits_per_radar_run: NonNegativeInt | None = None
+    instagram_transcripts: NonNegativeInt | None = None
+    instagram_published_videos: NonNegativeInt | None = None
+    tiktok_accounts: NonNegativeInt | None = None
+    tiktok_refreshes_per_month: NonNegativeInt | None = None
+    tiktok_credits_per_refresh: NonNegativeInt | None = None
+    manual_tiktok_full_collections: NonNegativeInt | None = None
+    tiktok_discovery_runs: NonNegativeInt | None = None
+    tiktok_credits_per_discovery_run: NonNegativeInt | None = None
+    tiktok_transcripts: NonNegativeInt | None = None
+    tiktok_published_videos: NonNegativeInt | None = None
+    youtube_channels: NonNegativeInt | None = None
+    youtube_refreshes_per_month: NonNegativeInt | None = None
+    manual_youtube_full_collections: NonNegativeInt | None = None
+    youtube_radar_queries: NonNegativeInt | None = None
+    youtube_published_videos: NonNegativeInt | None = None
+    outcome_checks_per_video: Annotated[int, Field(ge=0, le=4)] | None = None
+    llm_calls: NonNegativeInt | None = None
+    llm_input_tokens_per_call: NonNegativeInt | None = None
+    llm_output_tokens_per_call: NonNegativeInt | None = None
+    llm_annotated_videos: NonNegativeInt | None = None
+    llm_similarity_videos: NonNegativeInt | None = None
+    llm_profile_rebuilds: NonNegativeInt | None = None
+    llm_idea_candidates: NonNegativeInt | None = None
+    llm_manual_calls: NonNegativeInt | None = None
+
+
+class TrendWatcherPortfolioPatch(BaseModel):
+    tariff_id: PositiveInt
+    clients: NonNegativeInt
+
+
+class TrendWatcherDraft(BaseModel):
+    scenario_key: ScenarioKey
+    config: TrendWatcherConfigPatch = Field(default_factory=TrendWatcherConfigPatch)
+    drivers: TrendWatcherScenarioPatch = Field(default_factory=TrendWatcherScenarioPatch)
+
+
 def dec(v: float) -> Decimal:
     return Decimal(str(v))
+
+
+_TRENDWATCHER_CONFIG_DECIMAL_FIELDS = {
+    "provider_allowance_usd", "scrapecreators_price_per_1000",
+    "scrapecreators_pack_price_usd",
+    "apify_instagram_price_per_1000", "apify_actor_start_usd",
+    "llm_input_usd_per_million", "llm_output_usd_per_million",
+    "llm_retry_overhead_pct", "llm_platform_fee_pct", "payment_fee_pct",
+    "payment_fee_fixed_usd", "monthly_churn_pct", "cac_per_client_usd",
+}
+
+
+def _apply_trendwatcher_config(config, body: TrendWatcherConfigPatch) -> None:
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, set(data))
+    for field, value in data.items():
+        if field in _TRENDWATCHER_CONFIG_DECIMAL_FIELDS:
+            value = dec(value)
+        setattr(config, field, value)
+
+
+def _apply_trendwatcher_scenario(scenario, body: TrendWatcherScenarioPatch) -> None:
+    data = body.model_dump(exclude_unset=True)
+    _reject_nulls(data, set(data))
+    for field, value in data.items():
+        setattr(scenario, field, value)
 
 
 # ---------- accounts ----------
@@ -761,7 +872,8 @@ def _set_usage(db: Session, tariff: ServiceTariff, usage: dict[int, float]):
 @router.get("/services", dependencies=[Depends(require_token)])
 def list_services(db: Session = Depends(get_db)):
     rows = db.scalars(select(Service).order_by(Service.id)).all()
-    return [{"id": s.id, "name": s.name, "note": s.note} for s in rows]
+    return [{"id": s.id, "name": s.name, "note": s.note,
+             "preset_key": s.preset_key, "preset_version": s.preset_version} for s in rows]
 
 
 @router.post("/services", status_code=201, dependencies=[Depends(require_token)])
@@ -806,6 +918,12 @@ def delete_service(service_id: int, db: Session = Depends(get_db)):
         db.delete(t)
     for c in db.scalars(select(ServiceCost).where(ServiceCost.service_id == service_id)).all():
         db.delete(c)
+    for scenario in db.scalars(select(TrendWatcherScenario).where(
+            TrendWatcherScenario.service_id == service_id)).all():
+        db.delete(scenario)
+    config = db.get(TrendWatcherConfig, service_id)
+    if config is not None:
+        db.delete(config)
     db.delete(svc)
     db.commit()
     return {"ok": True}
@@ -817,6 +935,98 @@ def service_summary(service_id: int, db: Session = Depends(get_db)):
     if payload is None:
         raise HTTPException(404, f"unknown service {service_id}")
     return payload
+
+
+@router.patch("/services/{service_id}/trendwatcher/config",
+              dependencies=[Depends(require_token)])
+def patch_trendwatcher_config(service_id: int, body: TrendWatcherConfigPatch,
+                              db: Session = Depends(get_db)):
+    _get_service(db, service_id)
+    config = db.get(TrendWatcherConfig, service_id)
+    if config is None:
+        raise HTTPException(404, "service has no TrendWatcher model")
+    _apply_trendwatcher_config(config, body)
+    db.commit()
+    return {"ok": True}
+
+
+@router.patch("/services/{service_id}/trendwatcher/portfolio",
+              dependencies=[Depends(require_token)])
+def patch_trendwatcher_portfolio(service_id: int, body: TrendWatcherPortfolioPatch,
+                                 db: Session = Depends(get_db)):
+    """Model one subscription plan for the whole client scenario atomically."""
+    _get_service(db, service_id)
+    tariffs = db.scalars(select(ServiceTariff).where(
+        ServiceTariff.service_id == service_id
+    )).all()
+    selected = next((row for row in tariffs if row.id == body.tariff_id), None)
+    if selected is None:
+        raise HTTPException(404, f"unknown tariff {body.tariff_id} for service {service_id}")
+    for tariff in tariffs:
+        tariff.clients = body.clients if tariff.id == selected.id else 0
+    db.commit()
+    return {"ok": True}
+
+
+@router.patch("/services/{service_id}/trendwatcher/scenarios/{scenario_key}",
+              dependencies=[Depends(require_token)])
+def patch_trendwatcher_scenario(service_id: int, scenario_key: ScenarioKey,
+                                body: TrendWatcherScenarioPatch,
+                                db: Session = Depends(get_db)):
+    _get_service(db, service_id)
+    scenario = db.scalar(select(TrendWatcherScenario).where(
+        TrendWatcherScenario.service_id == service_id,
+        TrendWatcherScenario.key == scenario_key,
+    ))
+    if scenario is None:
+        raise HTTPException(404, f"unknown TrendWatcher scenario {scenario_key}")
+    _apply_trendwatcher_scenario(scenario, body)
+    db.commit()
+    return {"ok": True}
+
+
+def _get_trendwatcher_draft_rows(db: Session, service_id: int, scenario_key: ScenarioKey):
+    _get_service(db, service_id)
+    config = db.get(TrendWatcherConfig, service_id)
+    if config is None:
+        raise HTTPException(404, "service has no TrendWatcher model")
+    scenario = db.scalar(select(TrendWatcherScenario).where(
+        TrendWatcherScenario.service_id == service_id,
+        TrendWatcherScenario.key == scenario_key,
+    ))
+    if scenario is None:
+        raise HTTPException(404, f"unknown TrendWatcher scenario {scenario_key}")
+    return config, scenario
+
+
+@router.post("/services/{service_id}/trendwatcher/draft/preview",
+             dependencies=[Depends(require_token)])
+def preview_trendwatcher_draft(service_id: int, body: TrendWatcherDraft,
+                               db: Session = Depends(get_db)):
+    """Recalculate a complete service summary without persisting draft changes."""
+    config, scenario = _get_trendwatcher_draft_rows(db, service_id, body.scenario_key)
+    config_preview = copy(config)
+    scenario_preview = copy(scenario)
+    _apply_trendwatcher_config(config_preview, body.config)
+    _apply_trendwatcher_scenario(scenario_preview, body.drivers)
+    return service_summary_payload(
+        db,
+        service_id,
+        trendwatcher_config_override=config_preview,
+        trendwatcher_scenario_overrides={body.scenario_key: scenario_preview},
+    )
+
+
+@router.patch("/services/{service_id}/trendwatcher/draft",
+              dependencies=[Depends(require_token)])
+def apply_trendwatcher_draft(service_id: int, body: TrendWatcherDraft,
+                             db: Session = Depends(get_db)):
+    """Apply config and scenario changes in one transaction, then return the summary."""
+    config, scenario = _get_trendwatcher_draft_rows(db, service_id, body.scenario_key)
+    _apply_trendwatcher_config(config, body.config)
+    _apply_trendwatcher_scenario(scenario, body.drivers)
+    db.commit()
+    return service_summary_payload(db, service_id)
 
 
 @router.post("/services/{service_id}/tariffs", status_code=201, dependencies=[Depends(require_token)])
@@ -836,12 +1046,23 @@ def create_service_tariff(service_id: int, body: ServiceTariffIn, db: Session = 
 @router.patch("/services/{service_id}/tariffs/{tariff_id}", dependencies=[Depends(require_token)])
 def patch_service_tariff(service_id: int, tariff_id: int, body: ServiceTariffPatch,
                          db: Session = Depends(get_db)):
+    service = _get_service(db, service_id)
     t = db.get(ServiceTariff, tariff_id)
     if t is None or t.service_id != service_id:
         raise HTTPException(404, f"unknown service tariff {tariff_id}")
     data = body.model_dump(exclude_unset=True)
     usage = data.pop("usage", None)
     _reject_nulls(data, {"name", "price", "currency", "clients", "is_byo", "sort_order"})
+    if service.preset_key == "trendwatcher" and "is_byo" in data:
+        canonical_role = {
+            ("Managed", 0): False,
+            ("BYO keys", 1): True,
+        }.get((t.name, t.sort_order))
+        if canonical_role is not None and data["is_byo"] is not canonical_role:
+            raise HTTPException(
+                422,
+                f"{t.name} has a fixed provider-key role in the TrendWatcher preset",
+            )
     for field, value in data.items():
         if field == "price" and value is not None:
             value = dec(value)
@@ -992,6 +1213,44 @@ def patch_wish(wish_id: int, body: WishPatch, db: Session = Depends(get_db)):
         if field == "currency" and value is not None:
             value = value.upper()
         setattr(w, field, value)
+    if "status" in data:
+        if data["status"] == "completed" and w.completed_at is None:
+            w.completed_at = date.today()
+        elif data["status"] != "completed":
+            w.completed_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/wishes/{wish_id}/complete", dependencies=[Depends(require_token)])
+def complete_wish(wish_id: int, db: Session = Depends(get_db)):
+    """Убирает исполненное желание из активного списка, сохраняя его в истории."""
+    w = db.get(Wish, wish_id)
+    if w is None:
+        raise HTTPException(404, f"unknown wish {wish_id}")
+    if w.status == "completed":
+        if w.completed_at is None:
+            w.completed_at = date.today()
+            db.commit()
+        return {"ok": True, "completed_at": w.completed_at.isoformat()}
+    if w.status != "active":
+        raise HTTPException(409, "only active wishes can be completed")
+    w.status = "completed"
+    w.completed_at = date.today()
+    db.commit()
+    return {"ok": True, "completed_at": w.completed_at.isoformat()}
+
+
+@router.post("/wishes/{wish_id}/restore", dependencies=[Depends(require_token)])
+def restore_wish(wish_id: int, db: Session = Depends(get_db)):
+    """Возвращает исполненное желание в активный список."""
+    w = db.get(Wish, wish_id)
+    if w is None:
+        raise HTTPException(404, f"unknown wish {wish_id}")
+    if w.status != "completed":
+        raise HTTPException(409, "only completed wishes can be restored")
+    w.status = "active"
+    w.completed_at = None
     db.commit()
     return {"ok": True}
 
@@ -1019,6 +1278,7 @@ def promote_wish(wish_id: int, db: Session = Depends(get_db)):
     )
     db.add(o)
     w.status = "bought"
+    w.completed_at = None
     register_reference(db, Category, w.category)
     db.commit()
     return {"obligation_id": o.id}
@@ -1042,11 +1302,57 @@ def set_wish_image_url(request: Request, wish_id: int, body: WishImageUrl,
     # фетч-ответ может быть не картинкой (внутренний JSON/HTML при SSRF) — не храним и не отдаём (#28/#29)
     if not images.is_real_image(data):
         return {"ok": False, "image_url": None, "image_source": None}
-    fname = images.save_wish_image(request.app.state.image_dir, wish_id, data)
-    w.image_url = f"/wish-images/{fname}"
+    image_dir, image_prefix = _wish_image_storage(request)
+    fname = images.save_wish_image(image_dir, wish_id, data)
+    w.image_url = f"{image_prefix}/{fname}"
     w.image_source = "manual"
     db.commit()
     return {"ok": True, "image_url": w.image_url, "image_source": "manual"}
+
+
+@router.post("/wishes/{wish_id}/image/auto", dependencies=[Depends(require_token)])
+def set_wish_image_auto(request: Request, wish_id: int, db: Session = Depends(get_db)):
+    """Подобрать следующее public-domain/CC0-фото по названию мечты и сохранить локально."""
+    w = db.get(Wish, wish_id)
+    if w is None:
+        raise HTTPException(404, f"unknown wish {wish_id}")
+    candidates = images.find_openverse_images(w.name, w.category, w.image_source)
+    if not candidates:
+        return {
+            "ok": False,
+            "image_url": w.image_url,
+            "image_source": w.image_source,
+            "reason": "no_results",
+        }
+    # Похожие мечты не должны получать одну и ту же первую картинку: для первого
+    # автоподбора детерминированно раздвигаем старт по id. Последующие нажатия уже
+    # продолжают после сохранённого ov:<uuid> внутри find_openverse_images().
+    if not (w.image_source or "").startswith("ov:"):
+        start = (w.id - 1) % len(candidates)
+        candidates = candidates[start:] + candidates[:start]
+    for candidate in candidates[:5]:
+        data = images.fetch_bytes(candidate.url)
+        if not data or not images.is_real_image(data):
+            continue
+        if images.same_as_saved_wish_image(w.image_url, data):
+            continue
+        image_dir, image_prefix = _wish_image_storage(request)
+        fname = images.save_wish_image(image_dir, wish_id, data)
+        w.image_url = f"{image_prefix}/{fname}"
+        w.image_source = f"ov:{candidate.id}"
+        db.commit()
+        return {
+            "ok": True,
+            "image_url": w.image_url,
+            "image_source": w.image_source,
+            "reason": None,
+        }
+    return {
+        "ok": False,
+        "image_url": w.image_url,
+        "image_source": w.image_source,
+        "reason": "download_failed",
+    }
 
 
 @router.post("/wishes/{wish_id}/image/upload", dependencies=[Depends(require_token)])
@@ -1064,8 +1370,9 @@ async def upload_wish_image(request: Request, wish_id: int, file: UploadFile = F
     # content_type клиент-контролируем — проверяем сами магические байты (#29)
     if not images.is_real_image(data):
         raise HTTPException(400, "not a decodable image")
-    fname = images.save_wish_image(request.app.state.image_dir, wish_id, data)
-    w.image_url = f"/wish-images/{fname}"
+    image_dir, image_prefix = _wish_image_storage(request)
+    fname = images.save_wish_image(image_dir, wish_id, data)
+    w.image_url = f"{image_prefix}/{fname}"
     w.image_source = "upload"
     db.commit()
     return {"ok": True, "image_url": w.image_url, "image_source": "upload"}

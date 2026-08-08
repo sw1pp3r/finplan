@@ -39,6 +39,8 @@ export default function Snapshot() {
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [showAllAccounts, setShowAllAccounts] = useState(false)
+  const [showTrend, setShowTrend] = useState(false)
   const triedFx = useRef(false)
 
   // префилл «Сейчас» последним известным остатком по каждому счёту (даже если счёт
@@ -65,7 +67,7 @@ export default function Snapshot() {
     if (rt.missing && rt.missing.length > 0 && !triedFx.current) {
       triedFx.current = true
       try {
-        await api.post("/fx/refresh", {})
+        await api.post("/fx/refresh", {}, { feedback: false })
         setRates(await api.get<Rates>("/rates"))
       } catch { setRates(rt) }
     } else {
@@ -130,6 +132,18 @@ export default function Snapshot() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts, values, rateTo, base])
 
+  const balanceAccounts = accounts.filter((account) => {
+    const entered = enteredAmount(account.id)
+    const previous = lastAmount(account.id)
+    return (entered !== null && entered !== 0) || (previous !== undefined && previous !== 0)
+  })
+  const visibleAccounts = showAllAccounts
+    ? accounts
+    : balanceAccounts.length
+      ? balanceAccounts
+      : accounts.slice(0, 4)
+  const hiddenAccountsCount = accounts.length - visibleAccounts.length
+
   // открыть прошлый снимок на редактирование — поля заполняются ровно его строками
   async function editSnapshot(d: string) {
     const snap = await api.get<LastSnapshot>(`/snapshots/${d}`)
@@ -138,6 +152,7 @@ export default function Snapshot() {
     setValues(seed)
     setTakenAt(d)
     setEditing(true)
+    setShowAllAccounts(true)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -145,6 +160,7 @@ export default function Snapshot() {
   async function newSnapshot() {
     setTakenAt(todayIso())
     setEditing(false)
+    setShowAllAccounts(false)
     await seedFromPrefill()
   }
 
@@ -187,16 +203,15 @@ export default function Snapshot() {
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
-      <SectionHelp route="/snapshot" title="Баланс">
+      <SectionHelp route="/snapshot" title="Баланс" defaultOpen={false}>
         Сколько денег на счетах прямо сейчас — это точка, от которой строится прогноз. Вписывайте остатки раз
         в неделю-две, баланс сейчас = старт прогноза. Счета можно завести прямо здесь.
       </SectionHelp>
 
       {/* ── Итого (T0) + раскладка по счетам ── */}
-      <section className="grid gap-4 md:grid-cols-[1.5fr_1fr]">
-        <Card className="relative overflow-hidden">
-          <span className="pointer-events-none absolute left-0 top-5 bottom-5 w-[3px] rounded bg-primary" />
-          <CardContent className="py-6 pl-7">
+      <Card className="overflow-hidden">
+        <CardContent className="grid p-0 md:grid-cols-[1.5fr_1fr]">
+          <div className="px-5 py-6 md:px-6">
             <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">
               Итого на счетах
             </div>
@@ -205,16 +220,13 @@ export default function Snapshot() {
             </div>
             <p className="mt-2 max-w-[48ch] text-sm text-ink-2">
               Баланс сейчас = старт прогноза — отметка «сегодня», от которой{" "}
-              <Link to="/" className="font-semibold text-primary hover:underline">
+              <Link to="/" className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline sm:min-h-0">
                 кривая на дашборде
               </Link>{" "}
               считает запас хода.
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex h-full flex-col justify-center gap-3.5 py-5">
+          </div>
+          <div className="flex min-h-40 flex-col justify-center gap-3.5 border-t border-line-2 px-5 py-5 md:border-l md:border-t-0">
             {splits.length ? (
               <>
                 <div className="flex flex-col gap-2.5">
@@ -247,9 +259,9 @@ export default function Snapshot() {
                 Впиши остатки — увидишь, как распределён баланс по счетам.
               </p>
             )}
-          </CardContent>
-        </Card>
-      </section>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── Запись баланса сейчас ── */}
       <Card data-coach="snapshot">
@@ -269,8 +281,8 @@ export default function Snapshot() {
         <CardContent>
           {accounts.length ? (
             <form onSubmit={submitSnapshot} className="flex flex-col gap-4">
-              <Table>
-                <TableHeader>
+              <Table className="block md:table">
+                <TableHeader className="hidden md:table-header-group">
                   <TableRow>
                     <TableHead>Счёт</TableHead>
                     <TableHead className="w-20">Валюта</TableHead>
@@ -279,28 +291,30 @@ export default function Snapshot() {
                     <TableHead className="w-36 text-right">В базовой</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {accounts.map((a, idx) => {
+                <TableBody className="flex flex-col gap-2 md:table-row-group">
+                  {visibleAccounts.map((a) => {
                     const entered = enteredAmount(a.id)
                     const sameCur = a.currency === base
                     return (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{a.name}</TableCell>
-                        <TableCell className="text-ink-2">{a.currency}</TableCell>
-                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableRow key={a.id}
+                        className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-lg border border-line-2 bg-card-2 p-3 md:table-row md:border-0 md:bg-transparent md:p-0">
+                        <TableCell className="block h-auto p-0 font-medium md:table-cell md:h-10 md:p-2">{a.name}</TableCell>
+                        <TableCell className="block h-auto p-0 text-right text-ink-2 md:table-cell md:h-10 md:p-2 md:text-left">{a.currency}</TableCell>
+                        <TableCell className="col-span-2 block h-auto p-0 pt-0.5 text-xs tabular-nums text-muted-foreground md:table-cell md:h-10 md:p-2 md:text-right md:text-sm">
+                          <span className="md:hidden">Было: </span>
                           {lastAmount(a.id) !== undefined ? money(lastAmount(a.id)!) : "—"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="col-span-2 block h-auto p-0 pt-3 md:table-cell md:h-10 md:p-2">
                           <Input
-                            autoFocus={idx === 0}
+                            aria-label={`Текущий остаток — ${a.name}`}
                             inputMode="decimal"
-                            className="text-right tabular-nums tnum"
+                            className="min-h-11 min-w-0 text-right text-base tabular-nums tnum md:min-h-9 md:text-sm"
                             placeholder={lastAmount(a.id) !== undefined ? money(lastAmount(a.id)!) : ""}
                             value={values[a.id] ?? ""}
                             onChange={(e) => setValues((v) => ({ ...v, [a.id]: e.target.value }))}
                           />
                         </TableCell>
-                        <TableCell className="text-right tabular-nums tnum text-ink-3">
+                        <TableCell className="col-span-2 block h-auto p-0 pt-1 text-right text-xs tabular-nums tnum text-ink-3 md:table-cell md:h-10 md:p-2 md:text-sm">
                           {entered === null
                             ? "—"
                             : sameCur
@@ -312,11 +326,35 @@ export default function Snapshot() {
                   })}
                 </TableBody>
               </Table>
-              <div className="flex items-center gap-3">
-                <Input type="date" className="w-40" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} />
-                <Button type="submit" disabled={busy}>{busy ? "Сохраняю…" : saved ? "Записано ✓" : "Записать баланс"}</Button>
+              {hiddenAccountsCount > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-11 self-start sm:min-h-9"
+                  onClick={() => setShowAllAccounts(true)}
+                >
+                  Показать ещё {hiddenAccountsCount} {hiddenAccountsCount === 1 ? "счёт" : "счёта"}
+                </Button>
+              )}
+              {showAllAccounts && balanceAccounts.length < accounts.length && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-11 self-start sm:min-h-9"
+                  onClick={() => setShowAllAccounts(false)}
+                >
+                  Скрыть счета без остатка
+                </Button>
+              )}
+              <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
+                <Input aria-label="Дата баланса" type="date" className="min-h-11 w-full sm:w-40"
+                  value={takenAt} onChange={(e) => setTakenAt(e.target.value)} />
+                <Button type="submit" className="min-h-11 sm:min-h-9" disabled={busy}>
+                  {busy ? "Сохраняю…" : saved ? "Записано ✓" : "Записать баланс"}
+                </Button>
                 {editing && (
-                  <Button type="button" variant="ghost" onClick={() => void newSnapshot()}>
+                  <Button type="button" variant="ghost" className="min-h-11 sm:min-h-9"
+                    onClick={() => void newSnapshot()}>
                     ← Новая запись на сегодня
                   </Button>
                 )}
@@ -331,7 +369,11 @@ export default function Snapshot() {
       </Card>
 
       {/* ── Управление счетами ── */}
-      <AccountsManager onChanged={() => void load()} />
+      <AccountsManager
+        key={accounts.length ? "configured" : "empty"}
+        defaultOpen={accounts.length === 0}
+        onChanged={() => void load()}
+      />
 
       {/* ── История + расход (вторичный блок) ── */}
       {histRows.length > 0 && (
@@ -353,12 +395,17 @@ export default function Snapshot() {
               </TableHeader>
               <TableBody>
                 {histRows.map((r) => (
-                  <TableRow
-                    key={r.date}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => void editSnapshot(r.date)}
-                  >
-                    <TableCell className="tabular-nums text-muted-foreground underline-offset-4 hover:underline">{ddmm(r.date)}</TableCell>
+                  <TableRow key={r.date}>
+                    <TableCell className="p-0">
+                      <button
+                        type="button"
+                        className="min-h-11 w-full px-2 text-left tabular-nums text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        aria-label={`Редактировать баланс за ${ddmm(r.date)}`}
+                        onClick={() => void editSnapshot(r.date)}
+                      >
+                        {ddmm(r.date)}
+                      </button>
+                    </TableCell>
                     <TableCell className="text-right font-medium tabular-nums tnum">{money(r.total)}</TableCell>
                     <TableCell className="text-right tabular-nums tnum">
                       {r.delta == null
@@ -371,41 +418,48 @@ export default function Snapshot() {
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      {burnSeries.length >= 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Сколько тратится по неделям</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              насколько падает сумма между записями ({base}) и среднее за 4 раза
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <ComposedChart data={burnSeries} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
-                <XAxis
-                  dataKey="date" tickFormatter={(d: string) => ddmm(d)} minTickGap={32}
-                  tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickLine={false} axisLine={false}
-                />
-                <YAxis
-                  tickFormatter={(v: number) => money(v)} width={64} tick={{ fontSize: 11 }}
-                  stroke="var(--muted-foreground)" tickLine={false} axisLine={false}
-                />
-                <Tooltip
-                  formatter={(value, name) => [
-                    `${money(Number(value))} ${base}`,
-                    name === "avg" ? "среднее (4 пер.)" : "за период",
-                  ]}
-                  labelFormatter={(label) => ddmm(String(label))}
-                  contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", fontSize: 12 }}
-                />
-                <Bar dataKey="burn" fill="var(--foreground)" fillOpacity={0.18} isAnimationActive={false} />
-                <Line type="monotone" dataKey="avg" stroke="var(--neg)" strokeWidth={2} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+            {burnSeries.length >= 2 && (
+              <div className="mt-5 border-t border-line-2 pt-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-11 px-0 sm:min-h-9"
+                  aria-expanded={showTrend}
+                  onClick={() => setShowTrend((value) => !value)}
+                >
+                  {showTrend ? "Скрыть динамику" : "Показать динамику между снимками"}
+                </Button>
+                {showTrend && (
+                  <div className="mt-4">
+                    <p className="mb-3 text-sm text-muted-foreground">
+                      Насколько менялась общая сумма между записями ({base}) и среднее за четыре периода.
+                    </p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <ComposedChart data={burnSeries} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
+                        <XAxis
+                          dataKey="date" tickFormatter={(d: string) => ddmm(d)} minTickGap={32}
+                          tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickLine={false} axisLine={false}
+                        />
+                        <YAxis
+                          tickFormatter={(v: number) => money(v)} width={64} tick={{ fontSize: 11 }}
+                          stroke="var(--muted-foreground)" tickLine={false} axisLine={false}
+                        />
+                        <Tooltip
+                          formatter={(value, name) => [
+                            `${money(Number(value))} ${base}`,
+                            name === "avg" ? "среднее (4 пер.)" : "за период",
+                          ]}
+                          labelFormatter={(label) => ddmm(String(label))}
+                          contentStyle={{ borderRadius: 8, border: "1px solid var(--border)", fontSize: 12 }}
+                        />
+                        <Bar dataKey="burn" fill="var(--foreground)" fillOpacity={0.18} isAnimationActive={false} />
+                        <Line type="monotone" dataKey="avg" stroke="var(--neg)" strokeWidth={2} dot={false} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

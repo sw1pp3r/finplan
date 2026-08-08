@@ -11,7 +11,7 @@ export function InfoHint({ children, label }: { children: React.ReactNode; label
         <button
           type="button"
           aria-label={label ?? "Подсказка"}
-          className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border text-[0.65rem] leading-none text-muted-foreground transition-colors hover:bg-muted"
+          className="touch-target inline-flex h-6 w-6 shrink-0 cursor-help items-center justify-center rounded-full border text-[0.7rem] leading-none text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={(e) => e.preventDefault()}
         >
           ?

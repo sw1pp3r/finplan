@@ -62,18 +62,16 @@ def compute_service(*, tariffs: list, costs: list, rates: dict) -> ServiceResult
         price_base = _to_base(t.price, t.currency, rates)
         t_mrr = price_base * t.clients
         t_per_client = per_client_base * t.clients
-        t_per_unit = sum(
-            (_to_base(c.amount, c.currency, rates) / max(1, c.unit_size)
-             * t.usage.get(c.id, zero) * t.clients
-             for c in per_unit_costs),
-            zero,
-        )
-        per_client_var = per_client_base + sum(
+        # BYO means provider keys are supplied by the client. Fixed hosting and
+        # per-client support remain our COGS, while provider-metered usage does not.
+        per_unit_per_client = zero if t.is_byo else sum(
             (_to_base(c.amount, c.currency, rates) / max(1, c.unit_size)
              * t.usage.get(c.id, zero)
              for c in per_unit_costs),
             zero,
         )
+        t_per_unit = per_unit_per_client * t.clients
+        per_client_var = per_client_base + per_unit_per_client
         mrr += t_mrr
         clients_total += t.clients
         per_client_monthly += t_per_client

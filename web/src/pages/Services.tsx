@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Cell, IconBtn } from "@/components/InlineCell"
 import {
   api, type ServiceListItem, type ServiceSummary, type ServiceTariffRow, type ServiceCostRow,
+  type TrendWatcherDraftPayload,
 } from "@/lib/api"
 import { refreshCurrencies } from "@/lib/currencies"
 import { money } from "@/lib/format"
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CurrencySelect } from "@/components/CurrencySelect"
+import { TrendWatcherFinancialModel } from "@/components/services/TrendWatcherFinancialModel"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -95,7 +97,11 @@ function TariffsTable({ summary, onPatch, onDelete, onAdd }: {
 }) {
   const cur = summary.base_currency
   const perUnitCosts = summary.costs.filter((c) => c.kind === "per_unit")
-  const gridCols = `minmax(0,1.4fr) 100px 90px ${perUnitCosts.map(() => "110px").join(" ")} 110px 32px`
+  const gridCols = [
+    "minmax(0,1.4fr)", "56px", "152px", "90px",
+    ...perUnitCosts.map(() => "110px"),
+    "110px", "32px",
+  ].join(" ")
 
   const patchUsage = (t: ServiceTariffRow, costId: number, raw: string) => {
     const usage = { ...t.usage }
@@ -113,6 +119,7 @@ function TariffsTable({ summary, onPatch, onDelete, onAdd }: {
           <div className="grid items-center gap-x-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3"
             style={{ gridTemplateColumns: gridCols }}>
             <span>Тариф</span>
+            <span className="text-center">BYO</span>
             <span className="text-right">Цена</span>
             <span className="text-right">Клиенты</span>
             {perUnitCosts.map((c) => (
@@ -124,26 +131,37 @@ function TariffsTable({ summary, onPatch, onDelete, onAdd }: {
             <span />
           </div>
           <div className="divide-y divide-line-2">
-            {summary.tariffs.map((t) => (
-              <div key={t.id}
-                className="group grid items-center gap-x-2 px-3 py-1"
-                style={{ gridTemplateColumns: gridCols }}>
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <Cell defaultValue={t.name} ariaLabel="Тариф" className="min-w-0 flex-1"
+            {summary.tariffs.map((t) => {
+              const roleLocked = summary.trendwatcher !== null
+                && (t.name === "Managed" || t.name === "BYO keys")
+              return (
+                <div key={t.id}
+                  className="group grid items-center gap-x-2 px-3 py-1"
+                  style={{ gridTemplateColumns: gridCols }}>
+                  <Cell defaultValue={t.name} ariaLabel="Тариф" className="min-w-0"
                     onCommit={(v) => onPatch(t.id, { name: v.trim() || "Тариф" })} />
-                  <label className="flex flex-none items-center gap-1 text-[10px] font-semibold text-ink-3" title="BYO — клиент со своим ключом; fixed/per_client расходы всё равно считаются">
+                  <label
+                    className={cn(
+                      "flex items-center justify-center gap-1 text-[10px] font-semibold text-ink-3",
+                      roleLocked && "cursor-not-allowed opacity-65",
+                    )}
+                    title={roleLocked
+                      ? "Роль ключей закреплена финансовой моделью TrendWatcher"
+                      : "BYO — клиент со своим ключом; fixed/per_client расходы всё равно считаются"}
+                  >
                     <input type="checkbox" checked={t.is_byo} aria-label="BYO"
+                      disabled={roleLocked}
                       onChange={(e) => onPatch(t.id, { is_byo: e.target.checked })}
                       className="h-3 w-3 rounded-sm border-border accent-primary" />
                     BYO
                   </label>
-                </div>
-                <div className="flex items-center justify-end gap-1">
+                <div className="flex min-w-0 items-center justify-end gap-1">
                   <Cell defaultValue={String(t.price)} type="number" step="any" min="0.01" align="right"
-                    ariaLabel="Цена" className="w-16"
+                    ariaLabel="Цена" className="w-16 flex-none"
                     onCommit={(v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) onPatch(t.id, { price: n }) }} />
                   <CurrencySelect value={t.currency} onChange={(v) => onPatch(t.id, { currency: v })}
-                    className="h-7 w-[72px] text-[12px]" />
+                    ariaLabel={`Валюта тарифа ${t.name}`}
+                    className="h-7 w-[72px] flex-none text-[12px]" />
                 </div>
                 <Cell defaultValue={String(t.clients)} type="number" min="0" align="right"
                   ariaLabel="Клиенты"
@@ -156,9 +174,10 @@ function TariffsTable({ summary, onPatch, onDelete, onAdd }: {
                 <span className={cn("text-right text-[13px] font-semibold tnum", t.net_per_client >= 0 ? "text-pos" : "text-neg")}>
                   {signed(t.net_per_client, cur)}
                 </span>
-                <IconBtn onClick={() => onDelete(t.id)} label="Удалить тариф" danger><TrashIcon /></IconBtn>
-              </div>
-            ))}
+                  <IconBtn onClick={() => onDelete(t.id)} label={`Удалить тариф ${t.name}`} danger><TrashIcon /></IconBtn>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
@@ -215,6 +234,7 @@ function CostsTable({ summary, onPatch, onDelete, onAdd }: {
                       ariaLabel="Сумма" className="w-16"
                       onCommit={(v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) onPatch(c.id, { amount: n }) }} />
                     <CurrencySelect value={c.currency} onChange={(v) => onPatch(c.id, { currency: v })}
+                      ariaLabel={`Валюта расхода ${c.name}`}
                       className="h-7 w-[72px] text-[12px]" />
                   </div>
                   <Cell defaultValue={String(c.unit_size || 1)} type="number" min="1" step="any" align="right"
@@ -223,7 +243,7 @@ function CostsTable({ summary, onPatch, onDelete, onAdd }: {
                   <Cell defaultValue={c.unit_label ?? ""} ariaLabel="Юнит-лейбл" placeholder="роликов"
                     className={cn(!perUnit && "pointer-events-none opacity-40")}
                     onCommit={(v) => onPatch(c.id, { unit_label: v.trim() || null })} />
-                  <IconBtn onClick={() => onDelete(c.id)} label="Удалить расход" danger><TrashIcon /></IconBtn>
+                  <IconBtn onClick={() => onDelete(c.id)} label={`Удалить расход ${c.name}`} danger><TrashIcon /></IconBtn>
                 </div>
               )
             })}
@@ -248,6 +268,7 @@ export default function Services() {
   const [services, setServices] = useState<ServiceListItem[]>([])
   const [selected, setSelected] = useState<number | null>(null)
   const [summary, setSummary] = useState<ServiceSummary | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState("")
 
@@ -326,14 +347,35 @@ export default function Services() {
     await reloadSummary()
   }
 
+  const patchTrendWatcherConfig = async (body: Record<string, unknown>) => {
+    if (selected === null) return
+    await api.patch(`/services/${selected}/trendwatcher/config`, body)
+    await reloadSummary()
+  }
+  const previewTrendWatcherDraft = useCallback(async (body: TrendWatcherDraftPayload) => {
+    if (selected === null) throw new Error("Сервис не выбран")
+    return api.post<ServiceSummary>(`/services/${selected}/trendwatcher/draft/preview`, body)
+  }, [selected])
+  const applyTrendWatcherDraft = useCallback(async (body: TrendWatcherDraftPayload) => {
+    if (selected === null) throw new Error("Сервис не выбран")
+    const next = await api.patch<ServiceSummary>(`/services/${selected}/trendwatcher/draft`, body)
+    setSummary(next)
+    refreshCurrencies()
+    return next
+  }, [selected])
   return (
     <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-4">
       <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
         Сервисы
       </h1>
+      <div className="rounded-lg border border-border bg-bg-soft px-4 py-3 text-[13px] leading-relaxed text-ink-2">
+        <b className="font-semibold text-foreground">Песочница юнит-экономики.</b>{" "}
+        Тарифы, клиенты и себестоимость здесь нужны для сценарных расчётов и не меняют основной cash-flow прогноз finplan.
+      </div>
 
       {/* selector row */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 shadow-sm">
+      {services.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 shadow-sm">
         {services.length > 0 && (
           renaming ? (
             <div className="flex items-center gap-2">
@@ -346,7 +388,7 @@ export default function Services() {
             <>
               <Select value={selected !== null ? String(selected) : ""}
                 onValueChange={(v) => setSelected(Number(v))}>
-                <SelectTrigger className="h-8 w-56"><SelectValue placeholder="Сервис" /></SelectTrigger>
+                <SelectTrigger className="h-8 w-56" aria-label="Выбранный сервис"><SelectValue placeholder="Сервис" /></SelectTrigger>
                 <SelectContent>
                   {services.map((s) => (
                     <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
@@ -365,17 +407,25 @@ export default function Services() {
             </>
           )
         )}
-        <div className="flex-1" />
-        <Button variant="outline" size="sm" className="h-8" onClick={() => addService(null)}>+ Пустой</Button>
-        <Button variant="outline" size="sm" className="h-8" onClick={() => addService("trendwatcher")}>+ TrendWatcher (пресет)</Button>
-      </div>
+        {services.length > 0 && (
+          <>
+            <div className="flex-1" />
+            <Button variant="outline" size="sm" className="h-8" onClick={() => addService(null)}>+ Пустой</Button>
+            <Button variant="outline" size="sm" className="h-8" onClick={() => addService("trendwatcher")}>+ TrendWatcher (пресет)</Button>
+          </>
+        )}
+        </div>
+      )}
 
       {!services.length && (
         <div className="rounded-lg border border-border bg-card px-6 py-10 text-center shadow-sm">
-          <p className="text-sm text-ink-2">Пока нет ни одного сервиса.</p>
-          <div className="mt-4 flex justify-center gap-2">
+          <h2 className="text-base font-semibold">Соберите первую модель сервиса</h2>
+          <p className="mx-auto mt-1 max-w-[54ch] text-sm text-ink-2">
+            Начните с готового примера TrendWatcher или создайте пустую модель со своими тарифами и расходами.
+          </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             <Button variant="outline" size="sm" onClick={() => addService(null)}>+ Пустой</Button>
-            <Button size="sm" onClick={() => addService("trendwatcher")}>+ TrendWatcher (пресет)</Button>
+            <Button size="sm" onClick={() => addService("trendwatcher")}>Открыть пример TrendWatcher</Button>
           </div>
         </div>
       )}
@@ -389,10 +439,42 @@ export default function Services() {
             </div>
           )}
 
-          <SummaryStrip data={summary} />
+          {summary.trendwatcher ? (
+            <TrendWatcherFinancialModel
+              summary={summary}
+              onConfig={(body) => { void patchTrendWatcherConfig(body) }}
+              onDraftPreview={previewTrendWatcherDraft}
+              onDraftApply={applyTrendWatcherDraft}
+              onTariffClients={(tariffId, clients) => { void patchTariff(tariffId, { clients }) }}
+            />
+          ) : (
+            <SummaryStrip data={summary} />
+          )}
 
-          <TariffsTable summary={summary} onPatch={patchTariff} onDelete={delTariff} onAdd={addTariff} />
-          <CostsTable summary={summary} onPatch={patchCost} onDelete={delCost} onAdd={addCost} />
+          {summary.trendwatcher ? (
+            <section className="rounded-lg border border-border bg-card">
+              <button
+                type="button"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((open) => !open)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-[13px] font-semibold text-ink-2 hover:text-foreground"
+              >
+                <span>Расширенная модель: тарифы и статьи COGS</span>
+                <span aria-hidden="true">{advancedOpen ? "−" : "+"}</span>
+              </button>
+              {advancedOpen && (
+                <div className="space-y-3 border-t border-line-2 p-3">
+                  <TariffsTable summary={summary} onPatch={patchTariff} onDelete={delTariff} onAdd={addTariff} />
+                  <CostsTable summary={summary} onPatch={patchCost} onDelete={delCost} onAdd={addCost} />
+                </div>
+              )}
+            </section>
+          ) : (
+            <>
+              <TariffsTable summary={summary} onPatch={patchTariff} onDelete={delTariff} onAdd={addTariff} />
+              <CostsTable summary={summary} onPatch={patchCost} onDelete={delCost} onAdd={addCost} />
+            </>
+          )}
         </>
       )}
     </div>

@@ -15,6 +15,7 @@ from .db import (
     ObligationRow,
     ServiceCost,
     ServiceTariff,
+    TrendWatcherConfig,
     Wish,
 )
 
@@ -55,6 +56,8 @@ def _used_currencies(db) -> set:
     used |= set(db.scalars(select(CourseCost.currency)).all())
     used |= set(db.scalars(select(ServiceTariff.currency)).all())
     used |= set(db.scalars(select(ServiceCost.currency)).all())
+    if db.scalar(select(TrendWatcherConfig.service_id).limit(1)) is not None:
+        used.add("USD")  # provider rates/allowance in the TrendWatcher model are USD
     return used
 
 

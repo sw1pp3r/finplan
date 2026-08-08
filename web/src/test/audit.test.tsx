@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import type { ReactElement } from "react"
 import { fixtureFor } from "./fixtures"
@@ -62,13 +62,11 @@ describe("(B) дашборд: расходы/мес = required_monthly_income, �
   it("«Свободно/мес» = доходы(4710) − расходы(5400) = −690, а не доходы − burn(1300)", async () => {
     const { default: Dashboard } = await import("@/pages/Dashboard")
     renderAt(<Dashboard />)
-    await screen.findByText("Дашборд")
-    // расходы/мес = required = 5400 (обязательства + траты), не burn 1300
-    await waitFor(() =>
-      expect(screen.getAllByText((c) => /5\s*400/.test(c)).length).toBeGreaterThan(0),
-    )
+    await screen.findByRole("heading", { name: "Финансовый простор" })
     // свободно/мес отрицательно: −690 (доказывает, что вычли required, а не burn)
-    expect(screen.getAllByText((c) => /690/.test(c) && c.includes("USD")).length).toBeGreaterThan(0)
+    await waitFor(() =>
+      expect(screen.getByText("Свободно / мес").parentElement).toHaveTextContent(/690.*USD/),
+    )
   })
 })
 
@@ -104,10 +102,15 @@ describe("(D) Доходы: разбивка ожиданий по вероят�
 })
 
 describe("(E) Мечты: разбивка «сколько денег нужно» по приоритетам", () => {
-  it("показывает high/medium/low из by_priority", async () => {
+  it("раскрывает high/medium/low из by_priority по запросу", async () => {
     const { default: Wishes } = await import("@/pages/Wishes")
     renderAt(<Wishes />, "/wishes")
-    expect(await screen.findByText("Сколько денег нужно")).toBeInTheDocument()
+
+    const toggle = await screen.findByRole("button", { name: "Показать структуру списка" })
+    expect(toggle).toHaveAttribute("aria-expanded", "false")
+    expect(screen.queryByText("Высокий приоритет")).not.toBeInTheDocument()
+    fireEvent.click(toggle)
+
     expect(await screen.findByText("Высокий приоритет")).toBeInTheDocument()
     expect(await screen.findByText("Низкий приоритет")).toBeInTheDocument()
   })

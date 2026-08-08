@@ -9,6 +9,7 @@ const CARD_W = 380
 const VP_MARGIN = 16 // минимальный отступ карточки от края экрана
 const GAP = 14 // зазор между подсветкой и карточкой
 const SPOT_PAD = 8 // на сколько подсветка выходит за пределы цели
+const CONFETTI_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7", "#14b8a6", "#ec4899"]
 
 type Placement = "below" | "above" | "right" | "left"
 type Spot = { top: number; left: number; width: number; height: number }
@@ -69,14 +70,13 @@ function layout(rect: DOMRect, cw: number, ch: number, idx: number): View {
 // Праздничный финал: конфетти + карточка «всё настроено». Живёт отдельно от тура, чтобы
 // показаться уже после закрытия оверлея. Само-закрывается через несколько секунд.
 function Celebration({ onDone }: { onDone: () => void }) {
-  const colors = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7", "#14b8a6", "#ec4899"]
   const pieces = useMemo(
     () =>
       Array.from({ length: 84 }, (_, i) => ({
         left: Math.random() * 100,
         delay: Math.random() * 0.5,
         dur: 1.9 + Math.random() * 1.6,
-        bg: colors[i % colors.length],
+        bg: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
         rot: 360 + Math.random() * 540,
         size: 7 + Math.random() * 6,
         drift: (Math.random() * 2 - 1) * 16,

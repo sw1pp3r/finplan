@@ -284,6 +284,49 @@ def test_wish_delete(client):
     assert client.get("/api/wishes").json()["items"] == []
 
 
+def test_wish_complete_moves_to_dated_archive_and_can_be_restored(client):
+    wid = client.post("/api/wishes", json={
+        "name": "Поездка в горы", "amount": 150000, "currency": "KZT", "priority": "high",
+    }).json()["id"]
+
+    completed = client.post(f"/api/wishes/{wid}/complete")
+    assert completed.status_code == 200
+    assert completed.json() == {"ok": True, "completed_at": TODAY.isoformat()}
+
+    data = client.get("/api/wishes").json()
+    assert data["items"] == []
+    assert data["total"] == 0
+    assert data["by_priority"] == {}
+    assert len(data["completed_items"]) == 1
+    archived = data["completed_items"][0]
+    assert archived["id"] == wid
+    assert archived["name"] == "Поездка в горы"
+    assert archived["status"] == "completed"
+    assert archived["completed_at"] == TODAY.isoformat()
+
+    restored = client.post(f"/api/wishes/{wid}/restore")
+    assert restored.status_code == 200
+    restored_data = client.get("/api/wishes").json()
+    assert [item["id"] for item in restored_data["items"]] == [wid]
+    assert restored_data["items"][0]["status"] == "active"
+    assert restored_data["items"][0]["completed_at"] is None
+    assert restored_data["completed_items"] == []
+
+
+def test_wish_complete_is_idempotent_and_rejects_non_completed_restore(client):
+    wid = client.post("/api/wishes", json={
+        "name": "Камера", "amount": 2000, "currency": "USD",
+    }).json()["id"]
+
+    assert client.post(f"/api/wishes/{wid}/restore").status_code == 409
+    first = client.post(f"/api/wishes/{wid}/complete")
+    second = client.post(f"/api/wishes/{wid}/complete")
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["completed_at"] == first.json()["completed_at"]
+    assert client.post("/api/wishes/999/complete").status_code == 404
+
+
 def test_wish_promote_creates_obligation_and_marks_bought(client):
     wid = client.post("/api/wishes", json={
         "name": "Ноутбук", "amount": 2000, "currency": "USD", "priority": "high",
@@ -359,6 +402,270 @@ def test_wish_image_url_download_failure(client, monkeypatch):
     wid = client.post("/api/wishes", json={"name": "X", "amount": 1, "currency": "USD"}).json()["id"]
     r = client.post(f"/api/wishes/{wid}/image/url", json={"url": "https://example.com/x.jpg"})
     assert r.json()["ok"] is False and r.json()["image_url"] is None
+
+
+def test_wish_image_auto_finds_and_saves_public_domain_photo(client, monkeypatch):
+    from pathlib import Path
+
+    from app import images
+
+    candidate_id = "8e08e81c-8790-4965-967e-c69d17f7f8cf"
+    seen = {}
+
+    def fake_find(name, category, current_source):
+        seen.update(name=name, category=category, current_source=current_source)
+        return [images.OpenverseImage(
+            id=candidate_id,
+            url="https://upload.wikimedia.org/example/japan.jpg",
+        )]
+
+    monkeypatch.setattr(images, "find_openverse_images", fake_find)
+    monkeypatch.setattr(images, "fetch_bytes", lambda *a, **k: real_png())
+    wid = client.post("/api/wishes", json={
+        "name": "Путешествие в Японию",
+        "amount": 5000,
+        "currency": "USD",
+        "category": "Путешествия",
+    }).json()["id"]
+
+    r = client.post(f"/api/wishes/{wid}/image/auto")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["image_url"].startswith("/wish-images/")
+    assert body["image_source"] == f"ov:{candidate_id}"
+    assert seen == {
+        "name": "Путешествие в Японию",
+        "category": "Путешествия",
+        "current_source": None,
+    }
+    assert images.is_real_image(
+        (Path(client.app.state.image_dir) / body["image_url"].removeprefix("/wish-images/")).read_bytes()
+    )
+    item = next(i for i in client.get("/api/wishes").json()["items"] if i["id"] == wid)
+    assert item["image_url"] == body["image_url"]
+    assert item["image_source"] == f"ov:{candidate_id}"
+
+
+def test_wish_image_auto_returns_no_result_without_changing_existing_image(client, monkeypatch):
+    from app import images
+
+    monkeypatch.setattr(images, "find_openverse_images", lambda *a, **k: [])
+    wid = client.post("/api/wishes", json={
+        "name": "Очень редкая мечта",
+        "amount": 1,
+        "currency": "USD",
+        "image_url": "/wish-images/existing.jpg",
+        "image_source": "manual",
+    }).json()["id"]
+
+    r = client.post(f"/api/wishes/{wid}/image/auto")
+
+    assert r.status_code == 200
+    assert r.json() == {
+        "ok": False,
+        "image_url": "/wish-images/existing.jpg",
+        "image_source": "manual",
+        "reason": "no_results",
+    }
+    item = next(i for i in client.get("/api/wishes").json()["items"] if i["id"] == wid)
+    assert item["image_url"] == "/wish-images/existing.jpg"
+    assert item["image_source"] == "manual"
+
+
+def test_wish_image_auto_handles_download_failure_without_changing_image(client, monkeypatch):
+    from app import images
+
+    monkeypatch.setattr(
+        images,
+        "find_openverse_images",
+        lambda *a, **k: [images.OpenverseImage(
+            id="8e08e81c-8790-4965-967e-c69d17f7f8cf",
+            url="https://upload.wikimedia.org/example/japan.jpg",
+        )],
+    )
+    monkeypatch.setattr(images, "fetch_bytes", lambda *a, **k: None)
+    wid = client.post("/api/wishes", json={
+        "name": "Япония",
+        "amount": 1,
+        "currency": "USD",
+    }).json()["id"]
+
+    r = client.post(f"/api/wishes/{wid}/image/auto")
+
+    assert r.status_code == 200
+    assert r.json() == {
+        "ok": False,
+        "image_url": None,
+        "image_source": None,
+        "reason": "download_failed",
+    }
+
+
+def test_wish_image_auto_skips_unusable_result_and_saves_the_next_one(client, monkeypatch):
+    from app import images
+
+    first_id = "8e08e81c-8790-4965-967e-c69d17f7f8cf"
+    second_id = "0f4e1cff-84c0-42df-868c-550a2f399c55"
+    monkeypatch.setattr(
+        images,
+        "find_openverse_images",
+        lambda *a, **k: [
+            images.OpenverseImage(id=first_id, url="https://example.com/broken.jpg"),
+            images.OpenverseImage(id=second_id, url="https://example.com/working.jpg"),
+        ],
+    )
+    monkeypatch.setattr(
+        images,
+        "fetch_bytes",
+        lambda url, *a, **k: real_png() if url.endswith("working.jpg") else None,
+    )
+    wid = client.post("/api/wishes", json={
+        "name": "Япония",
+        "amount": 1,
+        "currency": "USD",
+    }).json()["id"]
+
+    r = client.post(f"/api/wishes/{wid}/image/auto")
+
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["image_source"] == f"ov:{second_id}"
+
+
+def test_wish_image_auto_varies_initial_photo_for_similar_wishes(client, monkeypatch):
+    from app import images
+
+    candidates = [
+        images.OpenverseImage(
+            id=f"00000000-0000-4000-8000-00000000000{index}",
+            url=f"https://example.com/travel-{index}.jpg",
+        )
+        for index in range(1, 4)
+    ]
+    monkeypatch.setattr(images, "find_openverse_images", lambda *a, **k: candidates)
+    monkeypatch.setattr(images, "fetch_bytes", lambda *a, **k: real_png())
+    first = client.post("/api/wishes", json={
+        "name": "Путешествие родителям",
+        "amount": 1,
+        "currency": "USD",
+        "category": "Путешествия",
+    }).json()["id"]
+    second = client.post("/api/wishes", json={
+        "name": "Путешествие друзьям",
+        "amount": 1,
+        "currency": "USD",
+        "category": "Путешествия",
+    }).json()["id"]
+
+    first_source = client.post(f"/api/wishes/{first}/image/auto").json()["image_source"]
+    second_source = client.post(f"/api/wishes/{second}/image/auto").json()["image_source"]
+
+    assert first_source != second_source
+
+
+def test_wish_image_auto_skips_same_photo_bytes_when_catalog_order_changes(client, monkeypatch):
+    from app import images
+
+    first_id = "8e08e81c-8790-4965-967e-c69d17f7f8cf"
+    duplicate_id = "0f4e1cff-84c0-42df-868c-550a2f399c55"
+    fresh_id = "a87b441d-2bbb-4f76-8b62-3f5db13fa37f"
+    original = real_png(color=(200, 20, 20))
+    fresh = real_png(color=(20, 180, 60))
+    wid = client.post("/api/wishes", json={
+        "name": "Путешествие в Японию",
+        "amount": 1,
+        "currency": "USD",
+    }).json()["id"]
+
+    monkeypatch.setattr(
+        images,
+        "find_openverse_images",
+        lambda *a, **k: [images.OpenverseImage(
+            id=first_id,
+            url="https://example.com/original.jpg",
+        )],
+    )
+    monkeypatch.setattr(images, "fetch_bytes", lambda *a, **k: original)
+    first = client.post(f"/api/wishes/{wid}/image/auto").json()
+    first_bytes = client.get(first["image_url"]).content
+
+    # Каталог может переупорядочиться или вернуть то же фото под другим UUID.
+    # «Подобрать другую» должна сравнивать само изображение, а не только source id.
+    monkeypatch.setattr(
+        images,
+        "find_openverse_images",
+        lambda *a, **k: [
+            images.OpenverseImage(id=duplicate_id, url="https://example.com/duplicate.jpg"),
+            images.OpenverseImage(id=fresh_id, url="https://example.com/fresh.jpg"),
+        ],
+    )
+    monkeypatch.setattr(
+        images,
+        "fetch_bytes",
+        lambda url, *a, **k: fresh if url.endswith("/fresh.jpg") else original,
+    )
+
+    second = client.post(f"/api/wishes/{wid}/image/auto").json()
+
+    assert second["ok"] is True
+    assert second["image_source"] == f"ov:{fresh_id}"
+    assert client.get(second["image_url"]).content != first_bytes
+
+
+def test_demo_wish_images_are_isolated_from_real_images(tmp_path, monkeypatch):
+    from app import images
+
+    candidate_id = "8e08e81c-8790-4965-967e-c69d17f7f8cf"
+    app = create_app(
+        database_url="sqlite://",
+        api_token=None,
+        seed=False,
+        image_dir=str(tmp_path / "wish-images"),
+    )
+    monkeypatch.setattr(
+        images,
+        "find_openverse_images",
+        lambda *a, **k: [images.OpenverseImage(
+            id=candidate_id,
+            url="https://example.com/photo.jpg",
+        )],
+    )
+    fetched = iter([
+        real_png(color=(200, 20, 20)),
+        real_png(color=(20, 80, 220)),
+    ])
+    monkeypatch.setattr(images, "fetch_bytes", lambda *a, **k: next(fetched))
+
+    with TestClient(app) as c:
+        demo_headers = {"X-Demo": "1"}
+        demo_id = c.get("/api/wishes", headers=demo_headers).json()["items"][0]["id"]
+        real_id = None
+        for index in range(demo_id):
+            real_id = c.post("/api/wishes", json={
+                "name": f"Реальная мечта {index}",
+                "amount": 1,
+                "currency": "USD",
+            }).json()["id"]
+        assert real_id == demo_id  # воспроизводим коллизию id между двумя БД
+
+        real = c.post(f"/api/wishes/{real_id}/image/auto").json()
+        real_bytes = c.get(real["image_url"]).content
+        demo = c.post(
+            f"/api/wishes/{demo_id}/image/auto",
+            headers=demo_headers,
+        ).json()
+
+        assert real["image_url"].startswith("/wish-images/")
+        assert not real["image_url"].startswith("/wish-images/demo/")
+        assert demo["image_url"].startswith("/wish-images/demo/")
+        assert c.get(real["image_url"]).content == real_bytes
+        assert c.get(demo["image_url"]).content != real_bytes
+
+
+def test_wish_image_auto_404_for_missing(client):
+    assert client.post("/api/wishes/999/image/auto").status_code == 404
 
 
 def test_wish_image_upload_saves(client):
@@ -915,6 +1222,22 @@ def test_spa_mount_tolerates_dist_without_assets(tmp_path):
         r = c.get("/")
     assert r.status_code == 200
     assert "no-cache" in r.headers.get("cache-control", "")
+
+
+def test_static_assets_are_gzip_compressed(tmp_path):
+    """Большие SPA-ассеты должны уходить с transport compression."""
+    dist = tmp_path / "dist"
+    assets = dist / "assets"
+    assets.mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><div id='root'></div>", encoding="utf-8")
+    (assets / "app.js").write_text("const payload = '" + ("finplan-" * 600) + "';", encoding="utf-8")
+
+    app = create_app(database_url="sqlite://", fx_autofetch=False, seed=False, static_dist=str(dist))
+    with TestClient(app) as c:
+        r = c.get("/assets/app.js", headers={"Accept-Encoding": "gzip"})
+
+    assert r.status_code == 200
+    assert r.headers.get("content-encoding") == "gzip"
 
 
 # ---------- auth ----------

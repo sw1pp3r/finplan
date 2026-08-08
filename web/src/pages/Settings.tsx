@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react"
 import { api, isDemo, setDemo, type Rates, type Ref, type Settings as SettingsData } from "@/lib/api"
 import { refreshCurrencies } from "@/lib/currencies"
 import { ddmm } from "@/lib/format"
+import { resetOnboarding } from "@/lib/onboarding"
 import { useShowCourse, setShowCourse } from "@/lib/prefs"
 import { SectionHelp } from "@/components/SectionHelp"
 import { InfoHint } from "@/components/InfoHint"
 import { AccountsManager } from "@/components/AccountsManager"
+import { PageSkeleton } from "@/components/PageSkeleton"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CurrencySelect } from "@/components/CurrencySelect"
@@ -38,19 +40,66 @@ const ADD = "__add__"
 // ── мелкие строительные блоки в стиле макета ────────────────────────────────
 function SectionHead({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="px-0.5 pb-2.5">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.07em] text-ink-3">{title}</h3>
+    <div className="min-w-0 px-0.5">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.07em] text-ink-3">{title}</h2>
       <p className="mt-1.5 max-w-[62ch] text-[13px] text-ink-2">{children}</p>
     </div>
   )
 }
 
-function Section({ title, head, children }: { title: string; head: React.ReactNode; children: React.ReactNode }) {
+function useDesktopSettingsLayout(): boolean {
+  const [desktop, setDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches,
+  )
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 640px)")
+    const sync = () => setDesktop(query.matches)
+    sync()
+    query.addEventListener("change", sync)
+    return () => query.removeEventListener("change", sync)
+  }, [])
+  return desktop
+}
+
+function Section({
+  title,
+  head,
+  meta,
+  mobileDefaultOpen = true,
+  children,
+}: {
+  title: string
+  head: React.ReactNode
+  meta?: string
+  mobileDefaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const desktop = useDesktopSettingsLayout()
+  const [mobileOpen, setMobileOpen] = useState(mobileDefaultOpen)
+  const open = desktop || mobileOpen
+
   return (
-    <section className="mb-7">
-      <SectionHead title={title}>{head}</SectionHead>
-      {children}
-    </section>
+    <details
+      open={open}
+      onToggle={(event) => {
+        if (!desktop) setMobileOpen(event.currentTarget.open)
+      }}
+      className="group mb-7"
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-start justify-between gap-4 pb-2.5 marker:content-none sm:pointer-events-none sm:min-h-0">
+        <SectionHead title={title}>{head}</SectionHead>
+        <span className="mt-0.5 flex shrink-0 items-center gap-2 text-[11px] font-medium text-ink-3 sm:hidden">
+          {meta && <span className="max-w-28 truncate">{meta}</span>}
+          <span
+            aria-hidden="true"
+            className="grid size-7 place-items-center rounded-md border border-border bg-card text-base leading-none transition-transform group-open:rotate-180"
+          >
+            ⌄
+          </span>
+        </span>
+      </summary>
+      <div>{children}</div>
+    </details>
   )
 }
 
@@ -180,11 +229,12 @@ function FxTable({ base }: { base: string }) {
           className={`mx-1 my-1.5 grid ${cols} items-center gap-3.5 rounded-[10px] bg-card px-3.5 py-2.5 [box-shadow:0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]`}
         >
           <div className="flex min-w-0 items-center gap-3">
-            <CurrencySelect value={currency} onChange={setCurrency} />
+            <CurrencySelect value={currency} onChange={setCurrency} ariaLabel="Добавляемая валюта" />
           </div>
           <div className="flex min-w-0 items-center gap-2">
             <span className="whitespace-nowrap text-[13px] text-ink-3">1 =</span>
-            <Input value={rate} onChange={(e) => setRate(e.target.value)} type="number" step="any" placeholder="курс" className="h-9 w-24 tnum" />
+            <Input value={rate} onChange={(e) => setRate(e.target.value)} type="number" step="any"
+              aria-label={`Курс к ${base}`} placeholder="курс" className="h-9 w-24 tnum" />
             <span className="text-[13px] text-ink-3">{base}</span>
           </div>
           <span className="hidden text-[13px] text-warn sm:block">вручную</span>
@@ -231,7 +281,8 @@ function RefManager({ title, path, hint }: { title: string; path: string; hint?:
         {hint && <p className="mt-1 text-[12.5px] text-ink-2">{hint}</p>}
       </div>
       <form onSubmit={add} className="mb-2 flex items-center gap-2">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Новое значение" className="h-9 flex-1" />
+        <Input value={name} onChange={(e) => setName(e.target.value)}
+          aria-label={`Новое значение: ${title}`} placeholder="Новое значение" className="h-9 flex-1" />
         <Button type="submit" variant="secondary" disabled={!name.trim()}>Добавить</Button>
       </form>
       {items.length > 0 && (
@@ -302,17 +353,16 @@ export default function Settings() {
     if (!next || next === settings.base_currency) return
     setBaseBusy(true); setBaseErr(null)
     try {
-      await api.patch("/settings", { base_currency: next })
-    } catch {
-      // нет курса для новой базы → подтягиваем его в фоне и повторяем (без нага юзеру)
-      try {
-        await api.post(`/fx/refresh?currency=${encodeURIComponent(next)}`, {})
-        await api.patch("/settings", { base_currency: next })
-      } catch {
-        setBaseErr(`Не удалось получить курс для ${next}. Можно задать его вручную в «Валютах и курсах» ниже.`)
-        setBaseBusy(false)
-        return
+      const rateKnown = next === rates?.base_currency
+        || rates?.rates.some((row) => row.currency === next && row.rate_to_base != null)
+      if (!rateKnown) {
+        await api.post(`/fx/refresh?currency=${encodeURIComponent(next)}`, {}, { feedback: false })
       }
+      await api.patch("/settings", { base_currency: next }, { feedback: false })
+    } catch {
+      setBaseErr(`Не удалось получить курс для ${next}. Можно задать его вручную в «Валютах и курсах» ниже.`)
+      setBaseBusy(false)
+      return
     }
     await load()
     void refreshCurrencies()
@@ -324,7 +374,7 @@ export default function Settings() {
     location.reload() // перезапрашиваем все вкладки с новым заголовком X-Demo
   }
 
-  if (!settings) return <div className="py-20 text-center text-sm text-muted-foreground">Загрузка…</div>
+  if (!settings) return <PageSkeleton label="Загружаю настройки" />
   const cur = settings.base_currency
   // в базовые предлагаем пресеты + текущую + ВСЕ известные приложению валюты (с курсом и
   // без — курс для выбранной базы подтянется сам в changeBase). Так KZT/AED и любую валюту
@@ -348,6 +398,7 @@ export default function Settings() {
         <Section
           title="Профиль"
           head="Имя показывается в боковой панели. Можно изменить в любой момент."
+          meta={settings.display_name?.trim() || "Не задано"}
         >
           <Card className="p-5">
             <form onSubmit={saveName} className="flex flex-wrap items-end gap-4">
@@ -369,6 +420,7 @@ export default function Settings() {
         <Section
           title="Базовая валюта"
           head="Валюта, в которой finplan показывает общий баланс и запас хода. Все остальные суммы приводятся к ней автоматически."
+          meta={cur}
         >
           <Card data-coach="base-currency" className="flex flex-row flex-wrap items-center gap-4 p-5">
             <div className="min-w-[200px] flex-1">
@@ -377,7 +429,7 @@ export default function Settings() {
                 <InfoHint>Валюта, в которой считается весь прогноз. Остальные суммы приводятся к ней по курсам.</InfoHint>
               </Label>
               <Select value={cur} onValueChange={changeBase} disabled={baseBusy}>
-                <SelectTrigger className="h-[42px] w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-[42px] w-full" aria-label="Базовая валюта"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {baseOptions.map((c) => <SelectItem key={c} value={c}>{labelFor(c)}</SelectItem>)}
                 </SelectContent>
@@ -398,6 +450,8 @@ export default function Settings() {
         <Section
           title="Валюты и курсы"
           head="Курс каждой валюты к базовой. Курсы обновляются автоматически раз в день — любой можно зафиксировать вручную."
+          meta={rates ? `${rates.rates.length} валют` : "Загрузка"}
+          mobileDefaultOpen={false}
         >
           <div id="rates" data-coach="rates" className="scroll-mt-20">
             <FxTable key={cur} base={cur} />
@@ -408,6 +462,8 @@ export default function Settings() {
         <Section
           title="Демо-режим"
           head="Витрина с данными примера. Реальные данные хранятся отдельно и не меняются, пока демо включено."
+          meta={demo ? "Включено" : "Выключено"}
+          mobileDefaultOpen={false}
         >
           <Card className="flex flex-row items-center gap-5 p-5">
             <div className="min-w-0 flex-1">
@@ -430,10 +486,37 @@ export default function Settings() {
           </Card>
         </Section>
 
+        <Section
+          title="Быстрый прогноз"
+          head="Трёхшаговый мастер можно запустить снова: он подхватит существующие данные и обновит их без дублей."
+          meta="3 шага"
+          mobileDefaultOpen={false}
+        >
+          <Card className="flex flex-row flex-wrap items-center gap-4 p-5">
+            <div className="min-w-0 flex-1">
+              <div className="text-[14.5px] font-semibold">Повторить короткую настройку</div>
+              <p className="mt-1.5 max-w-[60ch] text-[12.5px] text-ink-2">
+                Укажите текущий баланс, обычный доход и обязательные расходы — finplan сразу покажет обновлённый прогноз.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                resetOnboarding()
+                location.assign("/")
+              }}
+            >
+              Запустить мастер
+            </Button>
+          </Card>
+        </Section>
+
         {/* ── счета ──────────────────────────────────────────────────── */}
         <Section
           title="Счета"
           head="Счета и остатки — точка отсчёта прогноза. Здесь же управляйте составом баланса."
+          meta="Баланс"
         >
           <AccountsManager onChanged={load} />
         </Section>
@@ -442,6 +525,7 @@ export default function Settings() {
         <Section
           title="Параметры прогноза"
           head="Подушка безопасности, горизонт и ручная оценка трат, пока снимков мало."
+          meta={`${settings.horizon_days} дней`}
         >
           <Card className="p-5">
             <form onSubmit={saveParams} className="flex flex-wrap items-end gap-4">
@@ -476,6 +560,8 @@ export default function Settings() {
         <Section
           title="Справочники"
           head="Метки направлений дохода и категорий расходов — чтобы видеть, откуда и куда идут деньги."
+          meta="2 группы"
+          mobileDefaultOpen={false}
         >
           <div className="grid gap-4 lg:grid-cols-2">
             <RefManager title="Направления дохода" path="directions"
@@ -489,6 +575,8 @@ export default function Settings() {
         <Section
           title="Вкладка «Курс»"
           head="«Курс» — отдельная прикидка экономики обучения. На прогноз не влияет. Если не нужна — скройте её из меню."
+          meta={showCourse ? "Показана" : "Скрыта"}
+          mobileDefaultOpen={false}
         >
           <Card className="flex flex-row items-center gap-5 p-5">
             <div className="min-w-0 flex-1">

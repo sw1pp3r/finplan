@@ -2,13 +2,17 @@ import { useState } from "react"
 
 const key = (route: string) => `finplan-help-${route}`
 
-export function SectionHelp({ route, title, children }: {
+export function SectionHelp({ route, title, children, defaultOpen = true }: {
   route: string
   title?: string
   children: React.ReactNode
+  defaultOpen?: boolean
 }) {
   // первый заход — раскрыто; once collapsed → запоминаем
-  const [open, setOpen] = useState(() => localStorage.getItem(key(route)) !== "0")
+  const [open, setOpen] = useState(() => {
+    const stored = localStorage.getItem(key(route))
+    return stored == null ? defaultOpen : stored !== "0"
+  })
 
   function toggle() {
     const next = !open
@@ -17,14 +21,15 @@ export function SectionHelp({ route, title, children }: {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
       <div className="flex items-center gap-2">
         {title && <h1 className="text-lg font-semibold tracking-tight">{title}</h1>}
         <button
           onClick={toggle}
           title={open ? "Скрыть справку" : "Что это за раздел?"}
+          aria-label={open ? "Скрыть справку" : "Что это за раздел?"}
           aria-expanded={open}
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs text-muted-foreground transition-colors hover:bg-muted"
+          className="touch-target inline-flex h-7 w-7 items-center justify-center rounded-full border text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {open ? "×" : "?"}
         </button>

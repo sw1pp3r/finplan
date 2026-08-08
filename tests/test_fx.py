@@ -6,7 +6,10 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from app.db import CourseCost, CourseTariff, FxRate, Service, ServiceCost, ServiceTariff, init_db, make_engine
+from app.db import (
+    CourseCost, CourseTariff, FxRate, Service, ServiceCost, ServiceTariff,
+    TrendWatcherConfig, init_db, make_engine,
+)
 from app.fx import _used_currencies, store_rates
 
 D = date(2026, 6, 7)
@@ -69,3 +72,13 @@ def test_used_currencies_includes_service_tariffs_and_costs(db):
 
     assert "GBP" in used
     assert "CZK" in used
+
+
+def test_used_currencies_includes_trendwatcher_provider_usd(db):
+    service = Service(name="TW", preset_key="trendwatcher", preset_version=2)
+    db.add(service)
+    db.flush()
+    db.add(TrendWatcherConfig(service_id=service.id))
+    db.commit()
+
+    assert "USD" in _used_currencies(db)

@@ -219,7 +219,8 @@ def test_20_null_sort_order_does_not_crash():
                           "amount NUMERIC(18,2), currency VARCHAR(12), priority VARCHAR(10), "
                           "target_date DATE, category VARCHAR(80), status VARCHAR(10), note VARCHAR(300))"))
     _ensure_columns(e)
-    assert inspect(e).get_columns("wishes")  # колонка добавлена
+    wish_columns = {column["name"] for column in inspect(e).get_columns("wishes")}
+    assert {"sort_order", "completed_at"} <= wish_columns
     with e.begin() as conn:
         conn.execute(text("INSERT INTO wishes(name,amount,currency,priority,status,sort_order) "
                           "VALUES('a',10,'USD','medium','active',NULL)"))

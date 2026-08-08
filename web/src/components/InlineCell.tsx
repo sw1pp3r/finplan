@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
 /** Borderless inline cell input — text/number. Saves on blur+Enter, reverts on Escape. */
@@ -16,6 +16,12 @@ export function Cell({
   placeholder?: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    // Do not erase an in-progress edit, but always accept a fresh server value
+    // once the cell is idle. defaultValue alone never updates an existing input.
+    if (el && document.activeElement !== el) el.value = defaultValue
+  }, [defaultValue])
   const commit = () => {
     const el = ref.current
     if (!el) return
@@ -37,8 +43,8 @@ export function Cell({
         if (e.key === "Escape") { e.currentTarget.value = defaultValue; e.currentTarget.blur() }
       }}
       className={cn(
-        "h-7 w-full rounded-sm border border-transparent bg-transparent px-1.5 text-[13px] outline-none transition-colors",
-        "focus:border-border focus:bg-card",
+        "h-11 w-full rounded-sm border border-transparent bg-transparent px-1.5 text-[13px] outline-none transition-colors sm:h-7",
+        "focus:border-border focus:bg-card focus-visible:ring-2 focus-visible:ring-ring",
         align === "right" && "text-right tnum",
         className,
       )}
@@ -53,7 +59,8 @@ export function IconBtn({ onClick, label, danger, children }: {
   return (
     <button onClick={onClick} aria-label={label} title={label}
       className={cn(
-        "grid h-7 w-7 flex-none place-items-center rounded-md text-ink-3 opacity-0 transition-colors group-hover:opacity-100",
+        "touch-target sticky right-0 z-[1] grid h-11 w-11 flex-none place-items-center rounded-md bg-card text-ink-3 opacity-100 transition-colors sm:h-7 sm:w-7",
+        "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
         danger ? "hover:bg-neg-soft hover:text-neg" : "hover:bg-card-2 hover:text-foreground",
       )}>
       {children}

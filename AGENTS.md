@@ -19,8 +19,8 @@
 ## Рабочий цикл (TDD обязателен для логики)
 
 ```bash
-.venv/bin/python -m pytest -q          # сейчас: 170 passed (forecast, course, api, fx, demo, images, audit-регрессии)
-cd web && npx vitest run               # сейчас: 6 files / 39 tests passed
+.venv/bin/python -m pytest -q          # сейчас: 217 passed (forecast, course, api, fx, demo, images, audit-регрессии)
+cd web && npx vitest run               # сейчас: 15 files / 116 tests passed
 cd web && npm run build                # пересобрать SPA перед проверкой в браузере
 ```
 
@@ -34,7 +34,7 @@ cd web && npm run build                # пересобрать SPA перед �
 
 GH Actions на push в `main` (тесты → scp → docker build → up → health). Боевой доступ только из Tailscale: `http://localhost:8742`. После пуша: `gh run watch <id> --repo sw1pp3r/finplan`. Проверка живости: `curl http://localhost:8742/api/summary`.
 
-**Картинки мечт:** в `docker-compose.yml` volume `finplan-images:/srv/finplan/wish-images` + `FINPLAN_IMAGE_DIR` — картинки (по ссылке/загрузке файла) переживают редеплой. (Unsplash-поиск убран — `UNSPLASH_ACCESS_KEY` в прод-`.env` больше не используется, можно удалить.)
+**Картинки мечт:** в `docker-compose.yml` volume `finplan-images:/srv/finplan/wish-images` + `FINPLAN_IMAGE_DIR` — автоподбор через Openverse (только Public Domain/CC0, без ключа), ссылка и upload сохраняются локально и переживают редеплой. Unsplash-поиск остаётся удалённым; `UNSPLASH_ACCESS_KEY` не используется.
 
 Не коммить/пушить без явной просьбы. Ветка main — деплоит сразу.
 

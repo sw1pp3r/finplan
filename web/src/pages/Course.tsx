@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { CurrencySelect } from "@/components/CurrencySelect"
 import { Cell, IconBtn } from "@/components/InlineCell"
+import { PageSkeleton } from "@/components/PageSkeleton"
+import { SectionHelp } from "@/components/SectionHelp"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -55,7 +57,7 @@ function SectionHead({ title, totals, children }: {
   )
 }
 
-/* ── summary strip ────────────────────────────────────────────── */
+/* ── product verdict ──────────────────────────────────────────── */
 type Tone = "pos" | "warn" | "neg"
 function summaryTone(net: number, required: number): Tone {
   if (net <= 0) return "neg"
@@ -63,32 +65,42 @@ function summaryTone(net: number, required: number): Tone {
 }
 const TONE_NUM: Record<Tone, string> = { pos: "text-pos", warn: "text-warn", neg: "text-neg" }
 
-function SummaryStrip({ data }: { data: Course }) {
+function CourseVerdict({ data }: { data: Course }) {
   const cur = data.base_currency
   const tone = summaryTone(data.net_monthly, data.required_monthly_income)
-  const cover = data.required_monthly_income > 0
-    ? Math.round((data.net_monthly / data.required_monthly_income) * 100) : null
-  const Item = ({ label, value, sub, cls }: { label: string; value: React.ReactNode; sub?: string; cls?: string }) => (
-    <div className="min-w-0 flex-1 px-4 py-2.5 first:pl-0 last:pr-0">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">{label}</div>
-      <div className={cn("mt-0.5 truncate text-[15px] font-semibold tnum", cls)}>{value}</div>
-      {sub && <div className="mt-0.5 truncate text-[11px] text-ink-3">{sub}</div>}
-    </div>
-  )
+  const verdict = tone === "pos"
+    ? "Запуск покрывает финансовый минимум"
+    : tone === "warn"
+      ? "Курс прибыльный, но не закрывает финансовый минимум"
+      : "В текущей модели запуск убыточен"
+  const deltaLabel = data.net_vs_required >= 0 ? "Сверх минимума" : "До минимума"
+
   return (
-    <div className="flex flex-wrap divide-x divide-line-2 rounded-lg border border-border bg-card px-4">
-      <Item label="Выручка/мес" value={`+${money(data.gross_monthly)} ${cur}`} cls="text-pos"
-        sub={`${data.students_total} учеников за поток`} />
-      <Item label="Расходы/мес" value={`−${money(data.cost_monthly)} ${cur}`} cls="text-neg"
-        sub={`фикс ${money(data.fixed_monthly)} · на учеников ${money(data.variable_monthly)}`} />
-      <Item label="Прибыль/мес" value={signed(data.net_monthly, cur)} cls={TONE_NUM[tone]}
-        sub={`нужно ≥ ${money(data.required_monthly_income)} ${cur}`} />
-      <Item label="Прибыль/поток" value={signed(data.net_per_cohort, cur)}
-        cls={data.net_per_cohort >= 0 ? "text-pos" : "text-neg"}
-        sub={cohortLabel(data.cohort_months)} />
-      <Item label="vs breakeven" value={signed(data.net_vs_required, cur)} cls={TONE_NUM[tone]}
-        sub={cover === null ? undefined : `покрытие ${cover}%`} />
-    </div>
+    <section
+      aria-label="Финансовый результат запуска"
+      className="grid gap-5 rounded-lg border border-border bg-card px-5 py-5 shadow-sm sm:grid-cols-[minmax(0,1fr)_minmax(260px,auto)] sm:items-center"
+    >
+      <div>
+        <p className={cn("text-sm font-semibold", TONE_NUM[tone])}>{verdict}</p>
+        <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Прибыль в месяц</p>
+        <p className={cn("mt-0.5 text-3xl font-semibold tracking-tight tnum", TONE_NUM[tone])}>
+          {signed(data.net_monthly, cur)}
+        </p>
+        <p className="mt-1 text-sm text-ink-3">
+          {signed(data.net_per_cohort, cur)} за поток · {cohortLabel(data.cohort_months)}
+        </p>
+      </div>
+      <dl className="grid grid-cols-[1fr_auto] gap-x-8 gap-y-2 border-t border-line-2 pt-4 text-sm sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+        <dt className="text-ink-3">Выручка</dt>
+        <dd className="text-right font-semibold text-pos tnum">+{money(data.gross_monthly)} {cur}</dd>
+        <dt className="text-ink-3">Расходы курса</dt>
+        <dd className="text-right font-semibold text-neg tnum">−{money(data.cost_monthly)} {cur}</dd>
+        <dt className="text-ink-3">{deltaLabel}</dt>
+        <dd className={cn("text-right font-semibold tnum", TONE_NUM[tone])}>
+          {signed(data.net_vs_required, cur)}
+        </dd>
+      </dl>
+    </section>
   )
 }
 
@@ -100,15 +112,13 @@ function TariffsTable({ data, onPatch, onDelete, onAdd }: {
   onAdd: () => void
 }) {
   const cur = data.base_currency
-  const gridCols = "minmax(0,1.4fr) 190px 110px 130px 32px"
   return (
     <div className="rounded-lg border border-border bg-card">
       <SectionHead title="Тарифы"
         totals={<>выручка <b className="font-semibold text-foreground">{money(data.gross_monthly)} {cur}</b> / мес</>} />
-      <div className="overflow-x-auto border-t border-line-2">
-        <div className="min-w-full">
-          <div className="grid items-center gap-x-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3"
-            style={{ gridTemplateColumns: gridCols }}>
+      <div className="border-t border-line-2">
+        <div>
+          <div className="course-tariff-grid hidden items-center gap-x-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3 sm:grid">
             <span>Тариф</span>
             <span className="text-right">Цена</span>
             <span className="text-right">Продаж/поток</span>
@@ -117,31 +127,40 @@ function TariffsTable({ data, onPatch, onDelete, onAdd }: {
           </div>
           <div className="divide-y divide-line-2">
             {data.tariffs.map((t: CourseTariff) => (
-              <div key={t.id} className="group grid items-center gap-x-2 px-3 py-1"
-                style={{ gridTemplateColumns: gridCols }}>
-                <Cell defaultValue={t.name} ariaLabel="Тариф"
-                  onCommit={(v) => onPatch(t.id, { name: v.trim() || "Тариф" })} />
-                <div className="flex items-center justify-end gap-1">
+              <div key={t.id} className="course-tariff-grid group grid items-center gap-3 px-3 py-3 sm:gap-x-2 sm:py-1">
+                <div className="col-span-2 min-w-0 sm:col-span-1">
+                  <Cell defaultValue={t.name} ariaLabel="Тариф"
+                    onCommit={(v) => onPatch(t.id, { name: v.trim() || "Тариф" })} />
+                </div>
+                <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-end">
+                  <span className="text-[11px] font-medium text-ink-3 sm:hidden">Цена</span>
+                  <div className="flex items-center gap-1">
                   <Cell defaultValue={String(t.price)} type="number" step="any" min="0.01" align="right"
-                    ariaLabel="Цена" className="w-20"
+                    ariaLabel="Цена" className="w-20 min-w-0"
                     onCommit={(v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) onPatch(t.id, { price: n }) }} />
                   <CurrencySelect value={t.currency} onChange={(v) => onPatch(t.id, { currency: v })}
-                    className="h-7 w-[72px] text-[12px]" />
+                    ariaLabel={`Валюта тарифа ${t.name}`}
+                    className="min-h-11 w-[72px] text-[12px] sm:min-h-0 sm:h-7" />
+                  </div>
                 </div>
-                <Cell defaultValue={String(t.students)} type="number" min="0" align="right"
-                  ariaLabel="Продаж за поток"
-                  onCommit={(v) => { const n = Number(v); if (Number.isFinite(n) && n >= 0) onPatch(t.id, { students: Math.round(n) }) }} />
-                <span className="text-right text-[13px] font-semibold tnum text-pos">
-                  +{money(t.gross_base)} {cur}
+                <div className="flex min-w-0 flex-col gap-1 sm:block">
+                  <span className="text-[11px] font-medium text-ink-3 sm:hidden">Продаж за поток</span>
+                  <Cell defaultValue={String(t.students)} type="number" min="0" align="right"
+                    ariaLabel="Продаж за поток"
+                    onCommit={(v) => { const n = Number(v); if (Number.isFinite(n) && n >= 0) onPatch(t.id, { students: Math.round(n) }) }} />
+                </div>
+                <span className="flex flex-col text-left text-[13px] font-semibold tnum text-pos sm:text-right">
+                  <span className="text-[11px] font-medium text-ink-3 sm:hidden">Выручка за поток</span>
+                  <span>+{money(t.gross_base)} {cur}</span>
                 </span>
-                <IconBtn onClick={() => onDelete(t.id)} label="Удалить тариф" danger><TrashIcon /></IconBtn>
+                <IconBtn onClick={() => onDelete(t.id)} label={`Удалить тариф ${t.name}`} danger><TrashIcon /></IconBtn>
               </div>
             ))}
           </div>
         </div>
       </div>
       <button onClick={onAdd} aria-label="Добавить тариф"
-        className="m-1.5 inline-flex h-7 items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-accent-soft hover:text-primary">
+        className="m-1.5 inline-flex min-h-11 items-center gap-1.5 rounded-md border border-dashed border-border px-3 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-accent-soft hover:text-primary sm:min-h-0 sm:h-7 sm:px-2.5">
         <PlusIcon /> тариф
       </button>
       {!data.tariffs.length && (
@@ -161,49 +180,56 @@ function CostsTable({ data, onPatch, onDelete, onAdd }: {
   onAdd: () => void
 }) {
   const cur = data.base_currency
-  const gridCols = "minmax(0,1.4fr) 140px 190px 110px 32px"
   return (
     <div className="rounded-lg border border-border bg-card">
       <SectionHead title="Расходы курса"
         totals={<>расходы <b className="font-semibold text-foreground">{money(data.cost_monthly)} {cur}</b> / мес</>} />
-      <div className="overflow-x-auto border-t border-line-2">
-        <div className="min-w-full">
-          <div className="grid items-center gap-x-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3"
-            style={{ gridTemplateColumns: gridCols }}>
+      <div className="border-t border-line-2">
+        <div>
+          <div className="course-cost-grid hidden items-center gap-x-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3 sm:grid">
             <span>Статья</span><span>Тип</span><span className="text-right">Сумма</span>
             <span className="text-right">/мес в базе</span><span />
           </div>
           <div className="divide-y divide-line-2">
             {data.costs.map((c: CourseCost) => (
-              <div key={c.id} className="group grid items-center gap-x-2 px-3 py-1"
-                style={{ gridTemplateColumns: gridCols }}>
-                <Cell defaultValue={c.name} ariaLabel="Статья"
-                  onCommit={(v) => onPatch(c.id, { name: v.trim() || "Расход" })} />
-                <Select value={c.kind} onValueChange={(v) => onPatch(c.id, { kind: v })}>
-                  <SelectTrigger className="h-7 w-full text-[12px]" aria-label="Тип"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">фикс/мес</SelectItem>
-                    <SelectItem value="per_student">на ученика</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center justify-end gap-1">
+              <div key={c.id} className="course-cost-grid group grid items-center gap-3 px-3 py-3 sm:gap-x-2 sm:py-1">
+                <div className="col-span-2 min-w-0 sm:col-span-1">
+                  <Cell defaultValue={c.name} ariaLabel="Статья"
+                    onCommit={(v) => onPatch(c.id, { name: v.trim() || "Расход" })} />
+                </div>
+                <div className="flex min-w-0 flex-col gap-1 sm:block">
+                  <span className="text-[11px] font-medium text-ink-3 sm:hidden">Тип</span>
+                  <Select value={c.kind} onValueChange={(v) => onPatch(c.id, { kind: v })}>
+                    <SelectTrigger className="min-h-11 w-full text-[12px] sm:min-h-0 sm:h-7" aria-label="Тип"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">фикс/мес</SelectItem>
+                      <SelectItem value="per_student">на ученика</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-end">
+                  <span className="text-[11px] font-medium text-ink-3 sm:hidden">Сумма</span>
+                  <div className="flex items-center gap-1">
                   <Cell defaultValue={String(c.amount)} type="number" step="any" min="0.01" align="right"
-                    ariaLabel="Сумма" className="w-20"
+                    ariaLabel="Сумма" className="w-20 min-w-0"
                     onCommit={(v) => { const n = Number(v); if (Number.isFinite(n) && n > 0) onPatch(c.id, { amount: n }) }} />
                   <CurrencySelect value={c.currency} onChange={(v) => onPatch(c.id, { currency: v })}
-                    className="h-7 w-[72px] text-[12px]" />
+                    ariaLabel={`Валюта расхода ${c.name}`}
+                    className="min-h-11 w-[72px] text-[12px] sm:min-h-0 sm:h-7" />
+                  </div>
                 </div>
-                <span className="text-right text-[13px] tnum text-neg">
-                  −{money(c.monthly_base)} {cur}
+                <span className="flex flex-col text-left text-[13px] tnum text-neg sm:text-right">
+                  <span className="text-[11px] font-medium text-ink-3 sm:hidden">В месяц</span>
+                  <span>−{money(c.monthly_base)} {cur}</span>
                 </span>
-                <IconBtn onClick={() => onDelete(c.id)} label="Удалить расход" danger><TrashIcon /></IconBtn>
+                <IconBtn onClick={() => onDelete(c.id)} label={`Удалить расход ${c.name}`} danger><TrashIcon /></IconBtn>
               </div>
             ))}
           </div>
         </div>
       </div>
       <button onClick={onAdd} aria-label="Добавить статью"
-        className="m-1.5 inline-flex h-7 items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-accent-soft hover:text-primary">
+        className="m-1.5 inline-flex min-h-11 items-center gap-1.5 rounded-md border border-dashed border-border px-3 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-accent-soft hover:text-primary sm:min-h-0 sm:h-7 sm:px-2.5">
         <PlusIcon /> статья
       </button>
       {!data.costs.length && (
@@ -241,6 +267,7 @@ export default function CoursePage() {
     await reload()
   }
   const delTariff = async (id: number) => {
+    if (!window.confirm("Удалить тариф из модели курса?")) return
     await api.delete(`/course/tariffs/${id}`)
     await reload()
   }
@@ -257,6 +284,7 @@ export default function CoursePage() {
     await reload()
   }
   const delCost = async (id: number) => {
+    if (!window.confirm("Удалить статью расходов из модели курса?")) return
     await api.delete(`/course/costs/${id}`)
     await reload()
   }
@@ -264,28 +292,20 @@ export default function CoursePage() {
   const patchConfig = (body: Record<string, unknown>) =>
     api.patch("/course/config", body).then(load)
 
-  if (!data) return <p className="text-sm text-muted-foreground">Загрузка…</p>
+  if (!data) return <PageSkeleton label="Загружаю экономику курса" />
   const cur = data.base_currency
 
   return (
     <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-4">
-      {/* heading */}
-      <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-        Курс
-      </h1>
-
-      {/* sandbox header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0">
-          <h2 className="text-[17px] font-semibold tracking-tight">Запуск курса</h2>
-          <p className="mt-0.5 max-w-[60ch] text-[12.5px] text-ink-2">
-            Песочница «что если»: тарифы и расходы запуска → прибыль. Не влияет на основной прогноз.
-          </p>
-        </div>
-        <div className="ml-auto flex flex-none items-center gap-2 text-[12.5px] text-ink-2">
-          <span>Поток запускается</span>
+      <div className="flex flex-wrap items-start gap-4">
+        <SectionHelp route="/course" title="Курс" defaultOpen={false}>
+          Песочница запуска: меняйте тарифы, продажи и расходы, чтобы проверить
+          прибыльность. Эти расчёты не влияют на основной cash-flow прогноз.
+        </SectionHelp>
+        <div className="ml-auto flex w-full flex-none items-center justify-between gap-2 text-[12.5px] text-ink-2 sm:w-auto sm:justify-start">
+          <span>Новый поток</span>
           <Select value={String(data.cohort_months)} onValueChange={(v) => patchConfig({ cohort_months: Number(v) })}>
-            <SelectTrigger className="h-8 w-44 text-[12.5px]" aria-label="Периодичность потока"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="min-h-11 w-44 text-[12.5px] sm:min-h-0 sm:h-8" aria-label="Периодичность потока"><SelectValue /></SelectTrigger>
             <SelectContent>
               {COHORT.map((c) => <SelectItem key={c.v} value={String(c.v)}>{c.label}</SelectItem>)}
             </SelectContent>
@@ -300,7 +320,7 @@ export default function CoursePage() {
         </div>
       )}
 
-      <SummaryStrip data={data} />
+      <CourseVerdict data={data} />
 
       <TariffsTable data={data} onPatch={patchTariff} onDelete={delTariff} onAdd={addTariff} />
       <CostsTable data={data} onPatch={patchCost} onDelete={delCost} onAdd={addCost} />
@@ -312,7 +332,7 @@ export default function CoursePage() {
           ({cohortLabel(data.cohort_months)})
         </span>
         <div className="flex-1" />
-        <Button variant="outline" size="sm" className="h-8"
+        <Button variant="outline" size="sm" className="min-h-11 sm:min-h-0 sm:h-8"
           onClick={() => { setShowCourse(false); navigate("/") }}>
           Скрыть вкладку «Курс»
         </Button>

@@ -11,6 +11,7 @@ import { CurrencySelect } from "@/components/CurrencySelect"
 import { RefCombo } from "@/components/RefCombo"
 import { SectionHelp } from "@/components/SectionHelp"
 import { InfoHint } from "@/components/InfoHint"
+import { PageSkeleton } from "@/components/PageSkeleton"
 import { Input } from "@/components/ui/input"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -42,10 +43,14 @@ const GRID =
   "grid items-center gap-x-3.5 " +
   "grid-cols-[40px_minmax(0,1fr)_158px] " +
   "lg:grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px]"
+const READ_GRID =
+  "grid items-center gap-x-3.5 " +
+  "grid-cols-[40px_minmax(0,1fr)_auto] " +
+  "lg:grid-cols-[40px_minmax(0,1fr)_158px_124px_126px_120px]"
 const ACTION_RAIL =
   "col-span-full mt-3 flex flex-wrap items-center justify-end gap-1 border-t border-line-2 pt-3 opacity-100 " +
   "lg:pointer-events-none lg:absolute lg:right-3.5 lg:top-1/2 lg:mt-0 lg:-translate-y-1/2 " +
-  "lg:border-t-0 lg:bg-gradient-to-r lg:from-transparent lg:via-card-2 lg:to-card-2 lg:pl-9 lg:pt-0 " +
+  "lg:border-t-0 lg:bg-card-2 lg:pl-3 lg:pt-0 " +
   "lg:opacity-0 lg:transition-opacity lg:group-hover:pointer-events-auto lg:group-hover:opacity-100"
 
 // ───────────────────────────── icons ───────────────────────────────────────
@@ -127,111 +132,75 @@ function GroupLabel({ text, n }: { text: string; n: number }) {
   )
 }
 
-function IncomeTotalDashboard({
-  data,
-  cur,
-}: {
-  data: IncomeData
-  cur: string
-}) {
-  const future = data.expected.total
-  const total = data.total + future
-  return (
-    <section>
-      <div className="relative overflow-hidden rounded-lg border border-border bg-card px-6 py-5 shadow-sm">
-        <span aria-hidden className="absolute inset-y-[18px] left-0 w-[3px] rounded bg-pos" />
-        <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
-          Итого с будущими
-        </span>
-        <div className="tnum mt-1.5 text-[36px] font-semibold leading-[1.05] tracking-[-0.035em]">
-          {money(total)} {cur}
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-line-2 bg-card-2 px-4 py-3">
-            <span className="text-[12px] font-medium text-ink-3">Получено</span>
-            <span className="tnum mt-1 block text-[20px] font-semibold text-pos">{money(data.total)} {cur}</span>
-          </div>
-          <div className="rounded-lg border border-line-2 bg-card-2 px-4 py-3">
-            <span className="text-[12px] font-medium text-ink-3">Будущие</span>
-            <span className="tnum mt-1 block text-[20px] font-semibold text-warn">{money(future)} {cur}</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ───────────────────────────── pipeline header block ───────────────────────
-
-function PipelineTop({ data, expectedRows, cur, regularMonthly }: {
+function IncomePlan({ data, expectedRows, cur, regularMonthly }: {
   data: IncomeData
   expectedRows: Inflow[]
   cur: string
   regularMonthly: number
 }) {
   const exp = data.expected
-  const probMax = Math.max(1, ...Object.values(exp.by_probability ?? {}))
-  const receivedThisMonth = useMemo(() => {
-    const ym = todayIso().slice(0, 7)
-    return data.by_month?.[ym] ?? 0
-  }, [data.by_month])
-  const monthName = monthLabel(todayIso().slice(0, 7)).split(" ")[0]
+  const ym = todayIso().slice(0, 7)
+  const receivedThisMonth = data.by_month?.[ym] ?? 0
+  const monthName = monthLabel(ym).split(" ")[0]
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-      {/* pipeline */}
-      <div className="relative overflow-hidden rounded-lg border border-border bg-card px-6 py-5 shadow-sm">
-        <span className="absolute inset-y-[18px] left-0 w-[3px] rounded bg-warn" />
-        <div className="mb-1 flex items-center gap-2.5">
-          <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
-            Ожидается дальше
-          </span>
+    <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line-2 px-5 py-4">
+        <div>
+          <h2 className="text-base font-semibold">План поступлений</h2>
+          <p className="mt-0.5 text-sm text-ink-3">Что реально попадёт в прогноз</p>
+        </div>
+        {expectedRows.length > 0 && (
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warn-soft px-2.5 py-1 text-[11.5px] font-semibold text-warn">
             <i className="h-1.5 w-1.5 rounded-full bg-warn" />{expectedRows.length} в очереди
           </span>
+        )}
+      </header>
+
+      <div className="grid lg:grid-cols-[1.2fr_1fr]">
+        <div className="px-5 py-5">
+          <div className="flex items-center gap-1.5 text-sm text-ink-2">
+            Реалистично
+            <InfoHint label="Как считается реалистичная сумма">
+              Точные берём целиком, «скорее всего» — на 70%, «под вопросом» — на 30%.
+            </InfoHint>
+          </div>
+          <div className="tnum mt-1 text-[34px] font-semibold leading-none tracking-[-0.035em]">
+            {money(exp.weighted)} {cur}
+          </div>
+          <p className="mt-2 max-w-[52ch] text-sm text-ink-3">
+            Эта взвешенная сумма питает базовый прогноз.
+          </p>
         </div>
-        <div className="mt-1.5 text-[38px] font-semibold leading-[1.05] tracking-[-0.035em] tnum">
-          {money(exp.weighted)} {cur}
-        </div>
-        <div className="mt-1.5 flex items-center gap-1.5 text-[13.5px] text-ink-2">
-          <span><b className="font-semibold text-foreground">Реалистичная сумма</b> — она и питает кривую прогноза. Если сбудется всё на 100%: <b className="font-semibold text-foreground tnum">{money(exp.total)} {cur}</b>.</span>
-          <InfoHint>Точные берём целиком, «скорее всего» — на 70%, «под вопросом» — на 30%. Реалистичная сумма и попадает в прогноз.</InfoHint>
-        </div>
-        <div className="mt-4 flex flex-col gap-3">
+
+        <div className="divide-y divide-line-2 border-t border-line-2 px-5 lg:border-l lg:border-t-0">
           {(["confirmed", "likely", "possible"] as const).map((p) => {
             const v = exp.by_probability[p]
             const st = PROB_STYLE[p]
             return (
-              <div key={p} className="grid grid-cols-[1fr_auto] items-center gap-x-2.5 gap-y-2">
+              <div key={p} className="flex min-h-12 items-center justify-between gap-3 py-2">
                 <span className="text-[13px] text-ink-2">
                   {st.label} <span className="text-ink-3">{st.pct}</span>
                 </span>
                 <span className={cn("text-[13.5px] font-semibold tnum", st.text)}>+{money(v)} {cur}</span>
-                <span className="col-span-2 h-1.5 overflow-hidden rounded bg-card-2">
-                  <span className={cn("block h-full rounded", st.bar)} style={{ width: `${(v / probMax) * 100}%` }} />
-                </span>
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* context cards */}
-      <div className="flex flex-col gap-4 max-[980px]:flex-row">
-        <div className="flex flex-1 flex-col justify-center rounded-lg border border-border bg-card px-5 py-4 shadow-sm">
-          <span className="text-[12.5px] font-medium text-ink-2">Получено в {monthName.toLowerCase()}</span>
-          <span className="mt-1 text-[25px] font-semibold leading-none tracking-[-0.025em] text-pos tnum">
-            {money(receivedThisMonth)} {cur}
-          </span>
-          <span className="mt-1.5 text-[12px] text-ink-3">уже на счетах · в снимке «сегодня»</span>
+      <div className="grid border-t border-line-2 sm:grid-cols-3">
+        <div className="px-5 py-3.5">
+          <span className="text-xs text-ink-3">Если придёт всё</span>
+          <span className="tnum mt-0.5 block text-base font-semibold">{money(exp.total)} {cur}</span>
         </div>
-        <div className="flex flex-1 flex-col justify-center rounded-lg border border-border bg-card px-5 py-4 shadow-sm">
-          <span className="text-[12.5px] font-medium text-ink-2">Регулярный доход</span>
-          <span className="mt-1 text-[25px] font-semibold leading-none tracking-[-0.025em] tnum">
-            {money(regularMonthly)} {cur}
-            <span className="text-[15px] font-medium text-ink-3"> / мес</span>
-          </span>
-          <span className="mt-1.5 text-[12px] text-ink-3">повторяющиеся источники · без разовых</span>
+        <div className="border-t border-line-2 px-5 py-3.5 sm:border-l sm:border-t-0">
+          <span className="text-xs text-ink-3">Получено в {monthName.toLowerCase()}</span>
+          <span className="tnum mt-0.5 block text-base font-semibold text-pos">{money(receivedThisMonth)} {cur}</span>
+        </div>
+        <div className="border-t border-line-2 px-5 py-3.5 sm:border-l sm:border-t-0">
+          <span className="text-xs text-ink-3">Регулярно в месяц</span>
+          <span className="tnum mt-0.5 block text-base font-semibold">{money(regularMonthly)} {cur}</span>
         </div>
       </div>
     </section>
@@ -259,7 +228,7 @@ function ReadRow({ i, base, conv, onEdit, onMark, onLost, onReturn, onDelete }: 
       "group relative mx-1 rounded-[10px] px-4 py-3 transition-colors hover:bg-card-2",
       "[&+&]:shadow-[inset_0_1px_0_var(--line-2)]",
       lost && "opacity-50",
-      GRID,
+      READ_GRID,
     )}>
       <span className={cn(
         "grid h-10 w-10 place-items-center rounded-[10px] border text-[15px] font-semibold",
@@ -273,7 +242,7 @@ function ReadRow({ i, base, conv, onEdit, onMark, onLost, onReturn, onDelete }: 
           <span className="truncate">{name}</span>
           {regular ? (
             <span className="inline-flex flex-none items-center gap-1 rounded-md bg-accent-soft py-0.5 pl-1.5 pr-1.5 text-[11px] font-semibold text-primary">
-              <IcRepeat className="h-3 w-3" />{REC_SHORT[i.recurrence]}
+              <IcRepeat className="h-3 w-3" /><span className="hidden min-[430px]:inline">{REC_SHORT[i.recurrence]}</span>
             </span>
           ) : i.status === "expected" ? (
             <span className="flex-none rounded-md border border-border bg-card-2 px-2 py-0.5 text-[11px] font-semibold text-ink-3">
@@ -307,28 +276,28 @@ function ReadRow({ i, base, conv, onEdit, onMark, onLost, onReturn, onDelete }: 
 
       <div className={ACTION_RAIL} aria-label="Действия с доходом">
         <button onClick={onEdit} aria-label="Редактировать доход" title="Редактировать"
-          className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+          className="grid h-11 w-11 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground lg:h-8 lg:w-8">
           <IcEdit className="h-[15px] w-[15px]" />
         </button>
         {i.status === "expected" ? (
           <>
             <button onClick={onMark} aria-label="Отметить доход полученным"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos">
+              className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-pos hover:bg-pos-soft hover:text-pos lg:h-8 lg:px-2.5">
               <IcCheck className="h-[14px] w-[14px]" />Получено
             </button>
             <button onClick={onLost} aria-label="Отметить доход потерянным" title="Не пришло"
-              className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+              className="grid h-11 w-11 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground lg:h-8 lg:w-8">
               ✕
             </button>
           </>
         ) : (
           <button onClick={onReturn} aria-label="Вернуть доход в ожидаемые"
-            className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground">
+            className="inline-flex h-11 items-center rounded-lg border border-border bg-card px-3 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3 hover:text-foreground lg:h-8 lg:px-2.5">
             Вернуть
           </button>
         )}
         <button onClick={onDelete} aria-label="Удалить доход" title="Удалить"
-          className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg">
+          className="grid h-11 w-11 place-items-center rounded-lg border border-border bg-card text-ink-2 transition-colors hover:border-neg hover:bg-neg-soft hover:text-neg lg:h-8 lg:w-8">
           <IcTrash className="h-[15px] w-[15px]" />
         </button>
       </div>
@@ -340,12 +309,14 @@ function ReadRow({ i, base, conv, onEdit, onMark, onLost, onReturn, onDelete }: 
 // Те же колонки, что у read-строки (через GRID), плюс полнострочный футер.
 
 type FormState = {
+  name: string
   source: string
   amount: string
   currency: string
   recurrence: string
   date: string
   probability: string
+  status: "expected" | "received"
 }
 
 function InlineForm({ kind, state, set, directions, onSubmit, onCancel, onDelete }: {
@@ -358,91 +329,154 @@ function InlineForm({ kind, state, set, directions, onSubmit, onCancel, onDelete
   onDelete?: () => void
 }) {
   const regular = isRegular(state.recurrence)
+  const received = kind === "add" && state.status === "received"
+  const receivedDate = state.status === "received"
   return (
     <form onSubmit={onSubmit}
       className={cn(
         "relative mx-1 my-1.5 rounded-[10px] bg-card px-4 py-3",
         "shadow-[0_0_0_1px_var(--primary),0_0_0_4px_var(--accent-soft)]",
         GRID,
+        "max-[980px]:grid-cols-2",
       )}>
       {kind === "add" && (
-        <div className="col-span-full mb-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink-2">
-          <IcPlus className="h-[15px] w-[15px] text-primary" />Новый доход
+        <div className="col-span-full mb-0.5 flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-2">
+            <IcPlus className="h-[15px] w-[15px] text-primary" />Новый доход
+          </span>
+          <div role="group" aria-label="Статус нового дохода"
+            className="flex gap-px rounded-lg border border-border bg-card-2 p-[3px]">
+            {([["expected", "Ожидается"], ["received", "Получено"]] as const).map(([status, label]) => (
+              <button key={status} type="button" aria-pressed={state.status === status}
+                onClick={() => set("status", status)}
+                className={cn(
+                  "whitespace-nowrap rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors",
+                  state.status === status
+                    ? cn("bg-card shadow-sm", status === "received" ? "text-pos" : "text-warn")
+                    : "text-ink-3 hover:text-ink-2",
+                )}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      <span className={cn(
-        "grid h-10 w-10 place-items-center rounded-[10px] border text-[15px] font-semibold max-[980px]:hidden",
-        regular || kind === "add" ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2",
-      )}>
-        {kind === "add" ? <IcPlus className="h-[17px] w-[17px]" /> : initials(state.source || "•")}
-      </span>
+      {received ? (
+        <div role="group" aria-label="Поля полученного дохода"
+          className="col-span-full grid items-center gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(240px,1fr)_minmax(260px,0.9fr)_220px_170px]">
+          <Input
+            value={state.name}
+            onChange={(e) => set("name", e.target.value)}
+            placeholder="Название / от кого"
+            aria-label="Название дохода"
+            maxLength={120}
+            required
+            autoFocus
+          />
+          <div role="group" aria-label="Направление дохода" className="min-w-0">
+            <RefCombo
+              options={directions}
+              value={state.source}
+              onChange={(v) => set("source", v)}
+              placeholder="Направление"
+              width="min-w-0 flex-1"
+            />
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Input
+              type="number"
+              step="any"
+              min="0.01"
+              inputMode="decimal"
+              value={state.amount}
+              onChange={(e) => set("amount", e.target.value)}
+              placeholder="0"
+              aria-label="Сумма полученного дохода"
+              required
+              className="min-w-0 text-right font-medium tnum"
+            />
+            <CurrencySelect value={state.currency} onChange={(v) => set("currency", v)}
+              ariaLabel="Валюта полученного дохода" className="w-[78px]" />
+          </div>
+          <Input type="date" value={state.date} onChange={(e) => set("date", e.target.value)} required
+            aria-label="Дата получения" max={todayIso()} className="w-full" />
+        </div>
+      ) : (
+        <>
+          <span className={cn(
+            "grid h-10 w-10 place-items-center rounded-[10px] border text-[15px] font-semibold max-[980px]:hidden",
+            regular || kind === "add" ? "border-transparent bg-accent-soft text-primary" : "border-border bg-card-2 text-ink-2",
+          )}>
+            {kind === "add" ? <IcPlus className="h-[17px] w-[17px]" /> : initials(state.source || "•")}
+          </span>
 
-      {/* источник (RefCombo over directions/counterparties) */}
-      <RefCombo
-        options={directions}
-        value={state.source}
-        onChange={(v) => set("source", v)}
-        placeholder="Источник / направление"
-        width="w-full"
-      />
+          {/* источник (RefCombo over directions/counterparties) */}
+          <RefCombo
+            options={directions}
+            value={state.source}
+            onChange={(v) => set("source", v)}
+            placeholder="Источник / направление"
+            width="w-full"
+          />
 
-      {/* сумма + валюта */}
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Input
-          type="number"
-          step="any"
-          min="0.01"
-          inputMode="decimal"
-          value={state.amount}
-          onChange={(e) => set("amount", e.target.value)}
-          placeholder="0"
-          required
-          className="min-w-0 text-right font-medium tnum"
-        />
-        <CurrencySelect value={state.currency} onChange={(v) => set("currency", v)} className="w-[78px]" />
-      </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Input
+              type="number"
+              step="any"
+              min="0.01"
+              inputMode="decimal"
+              value={state.amount}
+              onChange={(e) => set("amount", e.target.value)}
+              placeholder="0"
+              aria-label="Сумма ожидаемого дохода"
+              required
+              className="min-w-0 text-right font-medium tnum"
+            />
+            <CurrencySelect value={state.currency} onChange={(v) => set("currency", v)}
+              ariaLabel="Валюта ожидаемого дохода" className="w-[78px]" />
+          </div>
 
-      {/* повтор */}
-      <Select value={state.recurrence} onValueChange={(v) => set("recurrence", v)}>
-        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="once">Разовый</SelectItem>
-          <SelectItem value="weekly">Еженедельно</SelectItem>
-          <SelectItem value="monthly">Ежемесячно</SelectItem>
-          <SelectItem value="yearly">Ежегодно</SelectItem>
-        </SelectContent>
-      </Select>
+          <Select value={state.recurrence} onValueChange={(v) => set("recurrence", v)}>
+            <SelectTrigger className="w-full" aria-label="Повторяемость дохода"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="once">Разовый</SelectItem>
+              <SelectItem value="weekly">Еженедельно</SelectItem>
+              <SelectItem value="monthly">Ежемесячно</SelectItem>
+              <SelectItem value="yearly">Ежегодно</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* дата */}
-      <Input type="date" value={state.date} onChange={(e) => set("date", e.target.value)} required className="w-full" />
+          <Input type="date" value={state.date} onChange={(e) => set("date", e.target.value)} required
+            aria-label={receivedDate ? "Дата получения" : "Ожидаемая дата"} className="w-full" />
 
-      {/* уверенность */}
-      <Select value={state.probability} onValueChange={(v) => set("probability", v)}>
-        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="confirmed">точно (100%)</SelectItem>
-          <SelectItem value="likely">скорее всего (70%)</SelectItem>
-          <SelectItem value="possible">под вопросом (30%)</SelectItem>
-        </SelectContent>
-      </Select>
+          <Select value={state.probability} onValueChange={(v) => set("probability", v)}>
+            <SelectTrigger className="w-full" aria-label="Уверенность дохода"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="confirmed">точно (100%)</SelectItem>
+              <SelectItem value="likely">скорее всего (70%)</SelectItem>
+              <SelectItem value="possible">под вопросом (30%)</SelectItem>
+            </SelectContent>
+          </Select>
+        </>
+      )}
 
       {/* footer */}
       <div className="col-span-full mt-2 flex items-center gap-2.5 border-t border-line-2 pt-3">
         <button type="button" onClick={onCancel}
-          className="rounded-lg px-3 py-1.5 text-[13.5px] font-medium text-ink-3 transition-colors hover:text-foreground">
+          className="min-h-11 rounded-lg px-3 py-1.5 text-[13.5px] font-medium text-ink-3 transition-colors hover:text-foreground sm:min-h-8">
           Отмена
         </button>
         <div className="flex-1" />
         {kind === "edit" && onDelete && (
           <button type="button" onClick={onDelete}
-            className="rounded-lg border border-border bg-card px-3.5 py-1.5 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-neg hover:text-neg">
+            className="min-h-11 rounded-lg border border-border bg-card px-3.5 py-1.5 text-[13.5px] font-medium text-ink-2 transition-colors hover:border-neg hover:text-neg sm:min-h-8">
             Удалить
           </button>
         )}
         <button type="submit"
-          className="rounded-lg border border-primary bg-primary px-3.5 py-1.5 text-[13.5px] font-medium text-primary-foreground shadow-sm transition-[filter] hover:brightness-105">
-          {kind === "add" ? "Добавить доход" : "Сохранить"}
+          className="min-h-11 rounded-lg border border-primary bg-primary px-3.5 py-1.5 text-[13.5px] font-medium text-primary-foreground shadow-sm transition-[filter] hover:brightness-105 sm:min-h-8">
+          {kind === "edit" ? "Сохранить" : received ? "Добавить полученный доход" : "Добавить доход"}
         </button>
       </div>
     </form>
@@ -452,16 +486,18 @@ function InlineForm({ kind, state, set, directions, onSubmit, onCancel, onDelete
 // ───────────────────────────── page ────────────────────────────────────────
 
 const EMPTY_FORM: FormState = {
-  source: "", amount: "", currency: "USD", recurrence: "once",
-  date: todayIso(), probability: "confirmed",
+  name: "", source: "", amount: "", currency: "USD", recurrence: "once",
+  date: todayIso(), probability: "confirmed", status: "expected",
 }
 
 export default function Income() {
   const [data, setData] = useState<IncomeData | null>(null)
   const [inflows, setInflows] = useState<Inflow[]>([])
   const [directions, setDirections] = useState<Ref[]>([])
-  const [filter, setFilter] = useState<"all" | "expected" | "received">("all")
+  const [filter, setFilter] = useState<"all" | "expected" | "received">("expected")
   const [adding, setAdding] = useState(false)
+  const [showAllReceived, setShowAllReceived] = useState(false)
+  const [showAnalytics, setShowAnalytics] = useState(false)
   const [addForm, setAddForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<FormState>(EMPTY_FORM)
@@ -510,7 +546,7 @@ export default function Income() {
     if (coachIdx !== null && COACH_STEPS[coachIdx]?.target === "income-form") openAdd()
   }, [coachIdx])
 
-  if (!data) return <div className="py-20 text-center text-sm text-muted-foreground">Загрузка…</div>
+  if (!data) return <PageSkeleton label="Загружаю доходы" />
 
   const cur = data.base_currency
 
@@ -532,12 +568,14 @@ export default function Income() {
     setAdding(false)
     setEditingId(i.id)
     setEditForm({
+      name: i.name,
       source: i.counterparty || i.direction || "",
       amount: String(i.amount),
       currency: i.currency,
       recurrence: i.recurrence,
       date: i.expected_date,
       probability: i.probability,
+      status: i.status === "received" ? "received" : "expected",
     })
   }
 
@@ -552,15 +590,16 @@ export default function Income() {
   async function submitAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const f = e.currentTarget
-    const source = sourcePayload(addForm.source)
-    if (addForm.recurrence === "once" && addForm.date < todayIso()) {
+    if (addForm.status === "received") {
       await api.post("/income", {
+        name: addForm.name.trim(),
         amount: Number(addForm.amount),
         currency: addForm.currency,
         received_date: addForm.date,
-        ...source,
+        direction: addForm.source.trim() || null,
       })
     } else {
+      const source = sourcePayload(addForm.source)
       await api.post("/inflows", {
         amount: Number(addForm.amount),
         currency: addForm.currency,
@@ -603,6 +642,7 @@ export default function Income() {
   )
   const expVisible = visible.filter((i) => i.status === "expected")
   const rcvVisible = visible.filter((i) => i.status !== "expected")
+  const displayedHistory = showAllReceived ? rcvVisible : rcvVisible.slice(0, 8)
 
   function renderRow(i: Inflow) {
     if (editingId === i.id) {
@@ -636,37 +676,29 @@ export default function Income() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionHelp route="/income" title="Доходы">
-        Два вида денег на входе: то, что вы уже <b>получили</b>, и то, что <b>ожидаете</b>. Ожидаемое попадает в прогноз с поправкой на вероятность. Пришли деньги — нажмите «получено».
-      </SectionHelp>
-
-      {/* heading */}
       <div className="flex items-start justify-between gap-5">
-        <div>
-          <h2 className="text-[21px] font-semibold tracking-[-0.03em]">Доходы</h2>
-          <p className="mt-0.5 text-[13px] text-ink-3">Поступления, которые питают прогноз</p>
-        </div>
+        <SectionHelp route="/income" title="Доходы" defaultOpen={false}>
+          Ожидаемые деньги попадают в прогноз с поправкой на вероятность. Когда деньги пришли, отметьте поступление полученным.
+        </SectionHelp>
         <button onClick={openAdd}
-          className="inline-flex h-[37px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-primary bg-primary px-4 text-[13.5px] font-medium text-primary-foreground shadow-sm transition-[filter] hover:brightness-105">
+          className="inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-primary bg-primary px-4 text-[13.5px] font-medium text-primary-foreground shadow-sm transition-[filter] hover:brightness-105 sm:h-9">
           <IcPlus className="h-4 w-4" />Добавить доход
         </button>
       </div>
 
-      <IncomeTotalDashboard data={data} cur={cur} />
-
-      {data.expected.total > 0 && (
-        <PipelineTop data={data} expectedRows={expectedRows} cur={cur} regularMonthly={regularMonthly} />
-      )}
+      <IncomePlan data={data} expectedRows={expectedRows} cur={cur} regularMonthly={regularMonthly} />
 
       {/* unified feed */}
       <section ref={feedRef} className="rounded-lg border border-border bg-card px-2 pb-3 pt-2 shadow-sm">
-        <div className="flex items-center justify-between gap-3.5 px-4 pb-3 pt-3.5">
-          <h3 className="text-[15.5px] font-semibold tracking-[-0.02em]">Все поступления</h3>
-          <div className="flex gap-px rounded-lg border border-border bg-card-2 p-[3px]">
+        <div className="flex flex-wrap items-center justify-between gap-3.5 px-4 pb-3 pt-3.5">
+          <h2 className="text-[15.5px] font-semibold tracking-[-0.02em]">Поступления</h2>
+          <div role="group" aria-label="Фильтр доходов"
+            className="flex w-full gap-px rounded-lg border border-border bg-card-2 p-[3px] min-[430px]:w-auto">
             {([["all", "Все"], ["expected", "Ожидается"], ["received", "Получено"]] as const).map(([f, label]) => (
-              <button key={f} onClick={() => setFilter(f)}
+              <button key={f} onClick={() => { setFilter(f); setShowAllReceived(false) }}
+                aria-pressed={filter === f}
                 className={cn(
-                  "whitespace-nowrap rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors",
+                  "min-h-11 flex-1 whitespace-nowrap rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors sm:min-h-8 sm:flex-none",
                   filter === f ? "bg-card text-foreground shadow-sm" : "text-ink-3 hover:text-ink-2",
                 )}>
                 {label}
@@ -703,70 +735,98 @@ export default function Income() {
             {rcvVisible.length > 0 && filter !== "expected" && (
               <>
                 <GroupLabel text="Получено" n={rcvVisible.length} />
-                {rcvVisible.map(renderRow)}
+                {displayedHistory.map(renderRow)}
+                {rcvVisible.length > displayedHistory.length && (
+                  <button
+                    type="button"
+                    className="mx-4 mt-2 min-h-11 rounded-lg border border-border px-4 text-sm font-medium text-ink-2 hover:bg-card-2"
+                    onClick={() => setShowAllReceived(true)}
+                  >
+                    Показать ещё {rcvVisible.length - displayedHistory.length}
+                  </button>
+                )}
               </>
             )}
           </>
         )}
       </section>
 
-      {/* summaries: by direction + by month (as on current page) */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-1.5 text-sm font-medium">
-            По направлениям
-            <InfoHint>Направление — откуда пришли деньги (Acme, обучение…). Настраивается в Настройках.</InfoHint>
+      <section className="rounded-lg border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between gap-4 px-5 py-4">
+          <div>
+            <h2 className="text-sm font-semibold">Аналитика полученных доходов</h2>
+            <p className="mt-0.5 text-sm text-ink-3">Направления и месяцы — без будущих поступлений</p>
           </div>
-          {Object.keys(data.by_direction).length ? (
-            <div className="flex flex-col gap-3">
-              {Object.entries(data.by_direction)
-                .sort(([, a], [, b]) => b - a)
-                .map(([dir, total]) => {
-                  const maxDir = Math.max(1, ...Object.values(data.by_direction))
-                  return (
-                    <div key={dir}>
-                      <div className="mb-1 flex items-baseline justify-between text-sm">
-                        <span className="font-medium">{dir}</span>
-                        <span className="tnum text-pos">+{money(total)} {cur}</span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-card-2">
-                        <div className="h-full rounded-full bg-pos/70" style={{ width: `${(total / maxDir) * 100}%` }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              <div className="my-1 h-px bg-line-2" />
-              <div className="flex items-baseline justify-between text-sm">
-                <span className="font-semibold">Итого</span>
-                <span className="font-semibold tnum">{money(data.total)} {cur}</span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-ink-3">Пока пусто.</p>
-          )}
+          <button
+            type="button"
+            className="min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-ink-2 hover:bg-card-2 sm:min-h-9"
+            aria-label={showAnalytics ? "Скрыть аналитику полученных доходов" : "Показать аналитику полученных доходов"}
+            aria-expanded={showAnalytics}
+            onClick={() => setShowAnalytics((value) => !value)}
+          >
+            {showAnalytics ? "Скрыть" : "Показать"}
+          </button>
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
-          <div className="mb-3 text-sm font-medium">По месяцам</div>
-          {Object.keys(data.by_month).length ? (
-            <div className="flex flex-col">
-              {Object.entries(data.by_month)
-                .sort(([a], [b]) => b.localeCompare(a))
-                .map(([m, total], idx) => (
-                  <div key={m} className={cn(
-                    "flex items-center justify-between py-2 text-sm",
-                    idx > 0 && "border-t border-line-2",
-                  )}>
-                    <span className="font-medium">{monthLabel(m)}</span>
-                    <span className="tnum text-pos">+{money(total)} {cur}</span>
+        {showAnalytics && (
+          <div className="grid gap-4 border-t border-line-2 p-5 lg:grid-cols-2">
+            <div>
+              <div className="mb-3 flex items-center gap-1.5 text-sm font-medium">
+                По направлениям
+                <InfoHint>Направление — откуда пришли деньги. Настраивается в Настройках.</InfoHint>
+              </div>
+              {Object.keys(data.by_direction).length ? (
+                <div className="flex flex-col gap-3">
+                  {Object.entries(data.by_direction)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([dir, total]) => {
+                      const maxDir = Math.max(1, ...Object.values(data.by_direction))
+                      return (
+                        <div key={dir}>
+                          <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
+                            <span className="font-medium">{dir}</span>
+                            <span className="tnum text-pos">+{money(total)} {cur}</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-card-2">
+                            <div className="h-full rounded-full bg-pos/70" style={{ width: `${(total / maxDir) * 100}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  <div className="my-1 h-px bg-line-2" />
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="font-semibold">Итого</span>
+                    <span className="font-semibold tnum">{money(data.total)} {cur}</span>
                   </div>
-                ))}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-3">Пока пусто.</p>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-ink-3">Пока пусто.</p>
-          )}
-        </div>
-      </div>
+
+            <div>
+              <div className="mb-3 text-sm font-medium">По месяцам</div>
+              {Object.keys(data.by_month).length ? (
+                <div className="flex flex-col">
+                  {Object.entries(data.by_month)
+                    .sort(([a], [b]) => b.localeCompare(a))
+                    .map(([m, total], idx) => (
+                      <div key={m} className={cn(
+                        "flex items-center justify-between py-2 text-sm",
+                        idx > 0 && "border-t border-line-2",
+                      )}>
+                        <span className="font-medium">{monthLabel(m)}</span>
+                        <span className="tnum text-pos">+{money(total)} {cur}</span>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-3">Пока пусто.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

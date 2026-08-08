@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import {
   LayoutDashboard,
@@ -9,24 +9,34 @@ import {
   GraduationCap,
   Boxes,
   SlidersHorizontal,
-  LineChart,
   Moon,
   Sun,
 } from "lucide-react"
-import Dashboard from "@/pages/Dashboard"
-import Snapshot from "@/pages/Snapshot"
-import Plans from "@/pages/Plans"
-import Income from "@/pages/Income"
-import Course from "@/pages/Course"
-import Services from "@/pages/Services"
-import Wishes from "@/pages/Wishes"
-import Settings from "@/pages/Settings"
 import { cn } from "@/lib/utils"
 import { api, isDemo, setDemo, type Account, type Settings as SettingsData } from "@/lib/api"
-import OnboardingWizard from "@/components/OnboardingWizard"
 import { useShowCourse } from "@/lib/prefs"
 import { useTheme, toggleTheme } from "@/lib/theme"
+import {
+  clearOnboardingDraft,
+  hasOnboardingDraft,
+  isOnboardingReplay,
+  ONBOARDING_COMPLETE_KEY,
+} from "@/lib/onboarding"
 import { CoachTour } from "@/components/CoachTour"
+import { ActionFeedback } from "@/components/ActionFeedback"
+import { PageSkeleton } from "@/components/PageSkeleton"
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary"
+import { FinplanMark } from "@/components/FinplanMark"
+
+const Dashboard = lazy(() => import("@/pages/Dashboard"))
+const Snapshot = lazy(() => import("@/pages/Snapshot"))
+const Plans = lazy(() => import("@/pages/Plans"))
+const Income = lazy(() => import("@/pages/Income"))
+const Course = lazy(() => import("@/pages/Course"))
+const Services = lazy(() => import("@/pages/Services"))
+const Wishes = lazy(() => import("@/pages/Wishes"))
+const Settings = lazy(() => import("@/pages/Settings"))
+const OnboardingWizard = lazy(() => import("@/components/OnboardingWizard"))
 
 function toggleDemo() {
   setDemo(!isDemo())
@@ -41,7 +51,7 @@ const navMain: NavItem[] = [
   { to: "/balance", label: "Баланс", icon: Wallet },
   { to: "/income", label: "Доходы", icon: TrendingUp },
   { to: "/expenses", label: "Расходы", icon: TrendingDown },
-  { to: "/wishes", label: "Мечты", icon: Flag },
+  { to: "/wishes", label: "Покупки", icon: Flag },
 ]
 
 function NavRow({ item }: { item: NavItem }) {
@@ -85,6 +95,7 @@ function profileInitials(name: string): string {
 export default function App() {
   const showCourse = useShowCourse()
   const theme = useTheme()
+  const mobileNavRef = useRef<HTMLElement>(null)
   const visibleNav = [
     ...navMain,
     ...(showCourse ? [{ to: "/course", label: "Курс", icon: GraduationCap }] : []),
@@ -101,11 +112,22 @@ export default function App() {
     return () => { alive = false }
   }, [])
 
-  // Онбординг: на пустой реальной БД (не демо, не пройден) показываем полноэкранный мастер.
+  // Онбординг: явный draft важнее косвенного признака «есть хотя бы один счёт».
+  // Так мастер возобновится после закрытия вкладки между счётом и первым прогнозом.
   const [onboarding, setOnboarding] = useState<"loading" | "show" | "hide">("loading")
   useEffect(() => {
-    if (isDemo() || localStorage.getItem("finplan-onboarded") === "1") {
+    // Явный replay из Настроек важнее текущего режима данных: мастер безопасно
+    // работает и с изолированной demo-БД, а кнопка не превращается в no-op.
+    if (isOnboardingReplay()) {
+      setOnboarding("show")
+      return
+    }
+    if (isDemo() || localStorage.getItem(ONBOARDING_COMPLETE_KEY) === "1") {
       setOnboarding("hide")
+      return
+    }
+    if (hasOnboardingDraft()) {
+      setOnboarding("show")
       return
     }
     let alive = true
@@ -123,7 +145,14 @@ export default function App() {
   }, [])
 
   // react-router не скроллит к #hash сам — ждём появления якоря и скроллим
-  const { hash } = useLocation()
+  const { hash, pathname } = useLocation()
+  useEffect(() => {
+    const active = mobileNavRef.current?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (active && typeof active.scrollIntoView === "function") {
+      active.scrollIntoView({ block: "nearest", inline: "center" })
+    }
+  }, [pathname])
+
   useEffect(() => {
     if (!hash) return
     const id = hash.slice(1)
@@ -148,13 +177,25 @@ export default function App() {
 
   if (onboarding === "show") {
     return (
-      <OnboardingWizard
-        onDone={() => {
-          localStorage.setItem("finplan-onboarded", "1")
-          setOnboarding("hide")
-          location.reload()
-        }}
-      />
+      <>
+        <RouteErrorBoundary>
+          <Suspense fallback={<div className="p-6"><PageSkeleton label="Открываю настройку" /></div>}>
+            <OnboardingWizard
+              onDone={(outcome) => {
+                if (outcome === "demo") {
+                  setDemo(true)
+                } else {
+                  localStorage.setItem(ONBOARDING_COMPLETE_KEY, "1")
+                  clearOnboardingDraft()
+                }
+                setOnboarding("hide")
+                location.reload()
+              }}
+            />
+          </Suspense>
+        </RouteErrorBoundary>
+        <ActionFeedback />
+      </>
     )
   }
 
@@ -163,9 +204,7 @@ export default function App() {
       {/* ===== sidebar (desktop) ===== */}
       <aside className="sticky top-0 hidden h-svh flex-col gap-[3px] border-r border-border bg-sidebar px-3.5 py-5 lg:flex">
         <div className="flex items-center gap-2.5 px-2 pb-5 pt-1.5">
-          <span className="grid size-[29px] place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <LineChart className="size-4" strokeWidth={2.2} />
-          </span>
+          <FinplanMark className="size-[29px] shrink-0 drop-shadow-sm" />
           <span className="text-base font-semibold tracking-tight">finplan</span>
         </div>
 
@@ -193,14 +232,15 @@ export default function App() {
         {/* mobile top bar with brand + horizontal nav */}
         <div className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur lg:hidden">
           <div className="flex items-center gap-2 px-4 py-2.5">
-            <LineChart className="size-5 text-primary" strokeWidth={2.2} />
+            <FinplanMark className="size-6 shrink-0 drop-shadow-sm" />
             <span className="text-sm font-semibold">finplan</span>
             <div className="ml-auto flex items-center gap-2">
               <DemoButton demo={demo} />
               <ThemeButton theme={theme} />
             </div>
           </div>
-          <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
+          <nav ref={mobileNavRef} aria-label="Основная навигация"
+            className="mobile-nav flex gap-1 overflow-x-auto px-3 pb-2">
             {[...visibleNav, { to: "/settings", label: "Настройки", icon: SlidersHorizontal }].map((n) => (
               <NavLink
                 key={n.to}
@@ -208,7 +248,7 @@ export default function App() {
                 end={n.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    "whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
+                    "touch-target inline-flex shrink-0 snap-start items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
                     isActive ? "bg-card font-medium text-foreground shadow-sm" : "text-ink-2"
                   )
                 }
@@ -226,25 +266,30 @@ export default function App() {
         </div>
 
         <main className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 lg:px-9 lg:pb-16 lg:pt-4">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/balance" element={<Snapshot />} />
-            <Route path="/snapshot" element={<Navigate to="/balance" replace />} />
-            <Route path="/income" element={<Income />} />
-            <Route path="/expenses" element={<Plans />} />
-            <Route path="/plans" element={<Navigate to="/expenses" replace />} />
-            <Route path="/wishes" element={<Wishes />} />
-            <Route path="/board" element={<Navigate to="/wishes?view=board" replace />} />
-            <Route path="/course" element={showCourse ? <Course /> : <Navigate to="/services" replace />} />
-            <Route path="/services" element={<Services />} />
-            <Route path="/more/course" element={<Navigate to={showCourse ? "/course" : "/services"} replace />} />
-            <Route path="/more/services" element={<Navigate to="/services" replace />} />
-            <Route path="/more/*" element={<Navigate to={showCourse ? "/course" : "/services"} replace />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <RouteErrorBoundary key={pathname}>
+            <Suspense fallback={<PageSkeleton label="Загружаю раздел" />}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/balance" element={<Snapshot />} />
+                <Route path="/snapshot" element={<Navigate to="/balance" replace />} />
+                <Route path="/income" element={<Income />} />
+                <Route path="/expenses" element={<Plans />} />
+                <Route path="/plans" element={<Navigate to="/expenses" replace />} />
+                <Route path="/wishes" element={<Wishes />} />
+                <Route path="/board" element={<Navigate to="/wishes?view=board" replace />} />
+                <Route path="/course" element={showCourse ? <Course /> : <Navigate to="/services" replace />} />
+                <Route path="/services" element={<Services />} />
+                <Route path="/more/course" element={<Navigate to={showCourse ? "/course" : "/services"} replace />} />
+                <Route path="/more/services" element={<Navigate to="/services" replace />} />
+                <Route path="/more/*" element={<Navigate to={showCourse ? "/course" : "/services"} replace />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Suspense>
+          </RouteErrorBoundary>
         </main>
       </div>
       <CoachTour />
+      <ActionFeedback />
     </div>
   )
 }
